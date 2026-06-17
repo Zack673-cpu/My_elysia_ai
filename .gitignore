@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+venv/
+.venv/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# Data (keep directories, ignore content)
+backend/data/conversations/*.json
+backend/data/personality/*.json
+backend/data/search_cache/*.json
+*.lock
+
+# Flutter
+frontend/.dart_tool/
+frontend/.packages
+frontend/build/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/android/local.properties
+
+# IDE & AI tools
+.idea/
+.vscode/
+.qoder/
+.agents/
+.claude/
+.lingma/
+.trae/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+auth_qrcode.png
+skills-lock.json
