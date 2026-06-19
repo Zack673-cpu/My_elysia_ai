@@ -35,7 +35,6 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
               itemBuilder: (context, index) {
                 final conv = chatProvider.conversations[index];
                 final date = DateFormat('MM/dd HH:mm').format(conv.updatedAt);
-                final stageColor = AppTheme.getStageColor(conv.stage);
 
                 return Dismissible(
                   key: Key(conv.conversationId),
@@ -51,13 +50,13 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
                   },
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: stageColor.withValues(alpha: 0.2),
-                      child: Icon(Icons.chat_bubble_outline,
-                          color: stageColor, size: 20),
+                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.2),
+                      child: const Icon(Icons.chat_bubble_outline,
+                          color: AppTheme.primaryColor, size: 20),
                     ),
                     title: Text(conv.title, overflow: TextOverflow.ellipsis),
                     subtitle: Text(
-                      '$date · ${conv.metadata.messageCount} 条消息 · ${conv.stage}',
+                      '$date · ${conv.metadata.messageCount} 条消息',
                       style: theme.textTheme.bodySmall,
                     ),
                     onTap: () {
