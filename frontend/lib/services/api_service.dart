@@ -126,9 +126,8 @@ class ApiService {
   }
 
   /// 更新设置
-  Future<void> updateSettings({String? stage, String? model}) async {
+  Future<void> updateSettings({String? model}) async {
     final body = <String, dynamic>{};
-    if (stage != null) body['stage'] = stage;
     if (model != null) body['model'] = model;
     final response = await _client.put(
       Uri.parse(ApiConfig.settings),

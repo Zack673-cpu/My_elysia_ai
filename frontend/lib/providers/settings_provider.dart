@@ -28,16 +28,6 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 更新阶段
-  Future<void> setStage(String stage) async {
-    _settings = _settings.copyWith(stage: stage);
-    await _storage.saveSettings(_settings);
-    try {
-      await _api.updateSettings(stage: stage);
-    } catch (_) {}
-    notifyListeners();
-  }
-
   /// 更新模型
   Future<void> setModel(String model) async {
     _settings = _settings.copyWith(model: model);

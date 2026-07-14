@@ -5,7 +5,6 @@ class Conversation {
   final String title;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final String stage;
   final String model;
   final ConversationMetadata metadata;
   final List<Message> messages;
@@ -15,7 +14,6 @@ class Conversation {
     this.title = '新对话',
     DateTime? createdAt,
     DateTime? updatedAt,
-    this.stage = 'demugo',
     this.model = 'deepseek-chat',
     ConversationMetadata? metadata,
     List<Message>? messages,
@@ -34,7 +32,6 @@ class Conversation {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : DateTime.now(),
-      stage: json['stage'] ?? 'demugo',
       model: json['model'] ?? 'deepseek-chat',
       metadata: json['metadata'] != null
           ? ConversationMetadata.fromJson(json['metadata'])
@@ -50,7 +47,6 @@ class Conversation {
         'title': title,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
-        'stage': stage,
         'model': model,
         'metadata': metadata.toJson(),
         'messages': messages.map((m) => m.toJson()).toList(),
