@@ -56,4 +56,3 @@ settings = Settings()
 
 if __name__ == "__main__":
     print(f"APP_NAME = {APP_NAME}")
-    print(f"APP_FULL_NAME = {APP_FULL_NAME}")

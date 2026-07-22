@@ -29,7 +29,7 @@ class AboutScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(AppConfig.appFullName, style: theme.textTheme.headlineMedium),
-                Text('你的心灵成长伙伴',
+                Text('你的心灵成长伙伴~',
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     )),
@@ -51,24 +51,18 @@ class AboutScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.warning_amber,
-                          color: theme.colorScheme.error, size: 20),
+                      
                       const SizedBox(width: 8),
-                      Text('重要声明',
+                      Text('说明🎶',
                           style: TextStyle(
-                            color: theme.colorScheme.error,
+                            color: theme.colorScheme.onSurface,
                             fontWeight: FontWeight.bold,
                           )),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '本应用提供的是心理支持和教育信息，不能替代专业的心理治疗或医疗诊断。'
-                    '如果你正在经历心理危机，请立即联系专业机构：\n\n'
-                    '• 全国 24 小时心理援助热线：400-161-9995\n'
-                    '• 北京心理危机研究与干预中心：010-82951332\n'
-                    '• 生命热线：400-821-1215\n'
-                    '• 紧急情况请拨打：110 或 120',
+                    '目前处于第一阶段，功能还不完善~',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],

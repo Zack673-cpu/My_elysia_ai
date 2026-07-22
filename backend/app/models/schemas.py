@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -22,7 +22,7 @@ class MessageMetadata(BaseModel):
 class Message(BaseModel):
     role: MessageRole
     content: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.utcnow())
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     metadata: MessageMetadata = Field(default_factory=MessageMetadata)
 
 
@@ -36,8 +36,8 @@ class ConversationMetadata(BaseModel):
 class Conversation(BaseModel):
     conversation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = "新对话"
-    created_at: datetime = Field(default_factory=lambda: datetime.utcnow())
-    updated_at: datetime = Field(default_factory=lambda: datetime.utcnow())
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     stage: str = "demugo"
     model: str = "deepseek-chat"
     metadata: ConversationMetadata = Field(default_factory=ConversationMetadata)

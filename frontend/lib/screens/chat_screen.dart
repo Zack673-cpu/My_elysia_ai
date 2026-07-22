@@ -136,37 +136,18 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text(
-              '你好，我是 ${AppConfig.appName}',
+              '嗨~ 我是 ${AppConfig.appName}',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
             Text(
-              '我整合多种心理学方法，为你提供专业的心理支持。\n随时可以说说你心里的想法，我在这里听你说。',
+              '和我聊聊天吧，我什么都会听你说的~',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
             ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '我提供的是心理支持而非医疗诊断。如有紧急情况，请拨打 24 小时心理援助热线：400-161-9995',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 24)
           ],
         ),
       ),
