@@ -69,13 +69,11 @@ class CreateConversationRequest(BaseModel):
 
 
 class SettingsResponse(BaseModel):
-    stage: str
     model: str
     base_url: str
 
 
 class SettingsUpdateRequest(BaseModel):
-    stage: Optional[str] = None
     model: Optional[str] = None
 
 

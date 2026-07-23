@@ -11,7 +11,7 @@ def test_imports():
     from app.config import settings
     from app.models.schemas import Message, Conversation, ChatRequest
     from app.storage.json_store import JsonStore
-    from app.services.llm_service import LLMService
+    from app.services.agent_service import AgentService, web_search
     from app.services.search_service import SearchService
     from app.services.prompt_service import PromptService
     from app.services.conversation_service import ConversationService
@@ -49,22 +49,21 @@ def test_prompt_service():
     print("✅ 提示词服务测试通过")
 
 
-def test_search_markers():
-    """测试搜索标记解析"""
-    from app.services.llm_service import LLMService
-    text = "我觉得需要了解一些信息 [SEARCH: 认知行为疗法 焦虑] 然后继续说 [SEARCH: 正念冥想]"
-    queries = LLMService.extract_search_queries(text)
-    assert len(queries) == 2
-    assert "认知行为疗法 焦虑" in queries
-    assert "正念冥想" in queries
-    cleaned = LLMService.clean_search_markers(text)
-    assert "[SEARCH" not in cleaned
-    print("✅ 搜索标记解析测试通过")
+def test_search_tool():
+    """测试搜索工具已注册为智能体工具"""
+    from app.services.agent_service import AgentService, web_search
+    # web_search 应为 LangChain 工具，具备 name 与 description
+    assert web_search.name == "web_search"
+    assert web_search.description and len(web_search.description) > 10
+    # 智能体应已挂载该工具
+    agent = AgentService()
+    assert any(t.name == "web_search" for t in agent.tools)
+    print("✅ 搜索工具注册测试通过")
 
 
 if __name__ == "__main__":
     test_imports()
     test_json_store()
     test_prompt_service()
-    test_search_markers()
+    test_search_tool()
     print("\n🎉 所有测试通过!")

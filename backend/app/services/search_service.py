@@ -3,7 +3,7 @@ import json
 import time
 from pathlib import Path
 from typing import Optional
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from app.config import settings
 
 
@@ -16,6 +16,8 @@ class SearchService:
     def __init__(self):
         self._last_search_time = 0.0
         self._cache_dir = settings.search_cache_dir
+        # 国内直连 DuckDuckGo 不可达，需走代理；留空则直连
+        self._proxy = settings.search_proxy or None
 
     def _cache_key(self, query: str) -> str:
         return hashlib.md5(query.encode()).hexdigest()
@@ -47,15 +49,16 @@ class SearchService:
 
         # 执行搜索
         try:
-            with DDGS() as ddgs:
+            with DDGS(proxy=self._proxy) as ddgs:
                 results = list(ddgs.text(query, max_results=max_results))
             self._last_search_time = time.time()
         except Exception as e:
             print(f"[SearchService] 搜索失败: {e}")
             results = []
 
-        # 写入缓存
-        self._write_cache(query, results)
+        # 仅缓存非空结果，避免失败的空结果被缓存 24h 导致后续查询无法重试
+        if results:
+            self._write_cache(query, results)
         return results
 
     @staticmethod

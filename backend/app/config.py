@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     deepseek_model: str = Field(default="deepseek-chat", alias="DEEPSEEK_MODEL")
     deepseek_base_url: str = Field(default="https://api.deepseek.com", alias="DEEPSEEK_BASE_URL")
 
+    # Search
+    # 国内访问 DuckDuckGo 需要代理（FClash 默认混合端口 http://127.0.0.1:7890），留空则直连
+    search_proxy: str = Field(default="", alias="SEARCH_PROXY")
+
     # Server
     host: str = Field(default="0.0.0.0", alias="HOST")
     port: int = Field(default=8000, alias="PORT")
