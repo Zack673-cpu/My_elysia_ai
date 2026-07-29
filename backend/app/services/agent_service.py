@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import AsyncGenerator
 
 from langchain_core.messages import (
@@ -38,6 +39,24 @@ def web_search(query: str) -> str:
     return SearchService.format_results_for_context(results)
 
 
+@tool
+def get_current_time() -> str:
+    """获取当前的真实日期和时间（服务器本地时间）。
+
+    当用户询问今天的日期、现在几点、星期几，或对话涉及"今天""最近""今年"等
+    需要以真实当前时间为基准的内容时，调用此工具获取准确时间，不要凭训练数据猜测。
+
+    Returns:
+        当前本地时间字符串，包含日期、时间、星期和时区偏移。
+    """
+    now = datetime.now().astimezone()
+    weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+    return (
+        f"当前时间：{now.strftime('%Y-%m-%d %H:%M:%S')} "
+        f"星期{weekdays[now.weekday()]}（UTC{now.strftime('%z')}）"
+    )
+
+
 class AgentService:
     """基于 LangGraph 的工具调用智能体，封装搜索工具。
 
@@ -54,7 +73,7 @@ class AgentService:
             temperature=0.8,
             max_tokens=2048,
         )
-        self.tools = [web_search]
+        self.tools = [web_search, get_current_time]
 
     def _build_agent(self, system_prompt: str):
         """根据系统提示词构建 react 智能体"""
@@ -89,7 +108,9 @@ class AgentService:
         result = await agent.ainvoke({"messages": messages})
         out_messages = result["messages"]
 
-        search_performed = any(isinstance(m, ToolMessage) for m in out_messages)
+        search_performed = any(
+            isinstance(m, ToolMessage) and m.name == "web_search" for m in out_messages
+        )
         tokens = 0
         for m in out_messages:
             usage = getattr(m, "usage_metadata", None)
@@ -119,12 +140,14 @@ class AgentService:
             {"messages": messages}, stream_mode="messages"
         ):
             if isinstance(chunk, ToolMessage):
-                search_performed = True
+                if chunk.name == "web_search":
+                    search_performed = True
                 continue
             if isinstance(chunk, AIMessageChunk):
                 # 工具调用增量不含正文文本，天然被跳过
                 if chunk.tool_call_chunks:
-                    search_performed = True
+                    if any(tc.get("name") == "web_search" for tc in chunk.tool_call_chunks):
+                        search_performed = True
                     continue
                 if chunk.content:
                     text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
