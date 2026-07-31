@@ -40,12 +40,9 @@ def test_json_store():
 def test_prompt_service():
     """测试提示词服务"""
     from app.services.prompt_service import PromptService
-    stages = PromptService.list_stages()
-    assert stages == ["demugo", "cryene", "elysia"]
-    for stage in stages:
-        prompt = PromptService.get_prompt(stage)
-        assert len(prompt) > 100, f"{stage} 提示词太短"
-        assert "心理" in prompt or "咨询" in prompt, f"{stage} 缺少心理学相关内容"
+    prompt = PromptService.get_prompt()
+    assert len(prompt) > 100, "提示词太短"
+    assert "心理" in prompt or "咨询" in prompt, "缺少心理学相关内容"
     print("✅ 提示词服务测试通过")
 
 

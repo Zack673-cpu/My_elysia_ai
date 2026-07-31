@@ -1,1 +1,1 @@
-# Demugo AI Backend - Psychological Counseling AI
+# My Elysia AI Backend - Psychological Counseling AI

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:demugo_ai/models/message.dart';
+import 'package:my_elysia_ai/models/message.dart';
 
 void main() {
   // ═══════════════════════════════════════

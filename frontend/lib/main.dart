@@ -8,11 +8,11 @@ import 'screens/chat_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const DemugoApp());
+  runApp(const MyElysiaAi());
 }
 
-class DemugoApp extends StatelessWidget {
-  const DemugoApp({super.key});
+class MyElysiaAi extends StatelessWidget {
+  const MyElysiaAi({super.key});
 
   @override
   Widget build(BuildContext context) {

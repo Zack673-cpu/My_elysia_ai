@@ -38,7 +38,6 @@ class Conversation(BaseModel):
     title: str = "新对话"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    stage: str = "demugo"
     model: str = "deepseek-chat"
     metadata: ConversationMetadata = Field(default_factory=ConversationMetadata)
     messages: list[Message] = Field(default_factory=list)

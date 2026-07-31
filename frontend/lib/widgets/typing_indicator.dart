@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import '../config/app_config.dart';
 
 class TypingIndicator extends StatelessWidget {
   final String content;
@@ -15,11 +16,9 @@ class TypingIndicator extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
+          const CircleAvatar(
             radius: 16,
-            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.2),
-            child: Icon(Icons.psychology, size: 18,
-                color: theme.colorScheme.primary),
+            backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
           ),
           const SizedBox(width: 8),
           Flexible(

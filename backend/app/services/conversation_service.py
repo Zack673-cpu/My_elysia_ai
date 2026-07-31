@@ -17,11 +17,10 @@ class ConversationService:
     def __init__(self):
         self.store = JsonStore(settings.conversations_dir)
 
-    def create_conversation(self, title: Optional[str] = None, stage: Optional[str] = None) -> Conversation:
+    def create_conversation(self, title: Optional[str] = None) -> Conversation:
         """创建新对话"""
         conv = Conversation(
             title=title or "新对话",
-            stage=stage or settings.stage,
             model=settings.deepseek_model,
         )
         self._save(conv)

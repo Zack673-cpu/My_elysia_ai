@@ -24,7 +24,7 @@ def _prepare_chat(conversation_id: str):
     if not conv:
         raise HTTPException(status_code=404, detail="对话不存在")
 
-    system_prompt = PromptService.get_prompt(conv.stage)
+    system_prompt = PromptService.get_prompt()
     history = conv_service.get_history(conversation_id)
     return conv, system_prompt, history
 

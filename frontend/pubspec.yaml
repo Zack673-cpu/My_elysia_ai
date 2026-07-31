@@ -1,5 +1,5 @@
-name: demugo_ai
-description: "Demugo AI - 心理咨询 AI 助手 (Demugo → Cryene → Elysia)"
+name: my_elysia_ai
+description: "My Elysia AI - 心理咨询 AI 助手 (Demugo → Cryene → Elysia)"
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -24,3 +24,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/

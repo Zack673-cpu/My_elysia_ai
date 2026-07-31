@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../models/message.dart';
-import '../config/theme.dart';
+import '../config/app_config.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -21,11 +21,9 @@ class MessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
-            CircleAvatar(
+            const CircleAvatar(
               radius: 16,
-              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.2),
-              child: const Icon(Icons.psychology, size: 18,
-                  color: AppTheme.primaryColor),
+              backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
             ),
             const SizedBox(width: 8),
           ],

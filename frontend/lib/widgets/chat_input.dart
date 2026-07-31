@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ChatInput extends StatefulWidget {
   final bool isLoading;
@@ -25,6 +26,19 @@ class _ChatInputState extends State<ChatInput> {
       _controller.clear();
       _focusNode.requestFocus();
     }
+  }
+
+  /// 回车发送，Shift+回车换行
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (event is KeyDownEvent &&
+        isEnter &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _handleSend();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -54,23 +68,25 @@ class _ChatInputState extends State<ChatInput> {
         child: Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                maxLines: 4,
-                minLines: 1,
-                decoration: InputDecoration(
-                  hintText: '说说你的想法...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
+              child: Focus(
+                onKeyEvent: _handleKey,
+                child: TextField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  maxLines: 4,
+                  minLines: 1,
+                  decoration: InputDecoration(
+                    hintText: '说说你的想法...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: theme.colorScheme.surfaceContainerHighest,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
                   ),
-                  filled: true,
-                  fillColor: theme.colorScheme.surfaceContainerHighest,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 12),
                 ),
-                onSubmitted: (_) => _handleSend(),
               ),
             ),
             const SizedBox(width: 8),

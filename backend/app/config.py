@@ -3,8 +3,8 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 
 # ====== 应用名称变量 ======
-# 阶段演进：Demugo → Cryene → Elysia，改这里即可
-APP_NAME = "Demugo"
+# 应用显示名（产品名），改这里即可；Demugo → Cryene → Elysia 是项目开发阶段代号（非人格，AI 角色始终是昔涟）
+APP_NAME = "My Elysia"
 APP_FULL_NAME = f"{APP_NAME} AI"
 # ==========================
 
@@ -24,9 +24,6 @@ class Settings(BaseSettings):
     # Server
     host: str = Field(default="0.0.0.0", alias="HOST")
     port: int = Field(default=8000, alias="PORT")
-
-    # Stage
-    stage: str = Field(default="demugo", alias="STAGE")
 
     # Data directory
     data_dir: str = Field(default="./data", alias="DATA_DIR")

@@ -1,10 +1,10 @@
-"""Demugo AI Backend 启动脚本"""
+"""My Elysia AI Backend 启动脚本"""
 import uvicorn
 from app.config import settings, APP_FULL_NAME
 
 
 def main():
-    print(f"🧠 {APP_FULL_NAME} Backend - Stage: {settings.stage.upper()}")
+    print(f"🧠 {APP_FULL_NAME} Backend")
     print(f"🌐 Server: http://{settings.host}:{settings.port}")
     print(f"📁 Data directory: {settings.data_dir}")
     print(f"🔑 DeepSeek API: {'✅ Configured' if settings.deepseek_api_key else '❌ Not set'}")

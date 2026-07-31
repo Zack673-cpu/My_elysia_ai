@@ -111,7 +111,7 @@ if (-not $BackendOnly) {
 # === Summary ===
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Magenta
-Write-Host "  Demugo AI - Update Complete!" -ForegroundColor Magenta
+Write-Host "  My_elysia_ai - Update Complete!" -ForegroundColor Magenta
 Write-Host "========================================" -ForegroundColor Magenta
 if ($doneSDK) { Write-Host "  Flutter SDK upgrade    OK" -ForegroundColor Green }
 if ($doneB)   { Write-Host "  Backend Python deps    OK" -ForegroundColor Green }

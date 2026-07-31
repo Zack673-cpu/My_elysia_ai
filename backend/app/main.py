@@ -6,7 +6,7 @@ from app.config import APP_FULL_NAME
 
 app = FastAPI(
     title=f"{APP_FULL_NAME} Backend",
-    description="心理咨询 AI 后端服务 — Demugo",
+    description="心理咨询 AI 后端服务 — Cryene",
     version="0.1.0",
 )
 

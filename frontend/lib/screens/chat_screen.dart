@@ -132,11 +132,13 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.psychology, size: 64,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)),
+            const CircleAvatar(
+              radius: 32,
+              backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
+            ),
             const SizedBox(height: 16),
             Text(
-              '嗨~ 我是 ${AppConfig.appName}',
+              '嗨~ 我是昔涟',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
@@ -144,6 +146,14 @@ class _ChatScreenState extends State<ChatScreen> {
               '和我聊聊天吧，我什么都会听你说的~',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '开发中，Cryene 阶段',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
             ),
@@ -167,8 +177,10 @@ class _ChatScreenState extends State<ChatScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Icon(Icons.psychology, size: 40,
-                    color: Theme.of(context).colorScheme.primary),
+                const CircleAvatar(
+                  radius: 20,
+                  backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   AppConfig.appFullName,

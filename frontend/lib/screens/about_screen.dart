@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../config/app_config.dart';
-import '../config/theme.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -18,14 +17,9 @@ class AboutScreen extends StatelessWidget {
           Center(
             child: Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.psychology,
-                      size: 64, color: AppTheme.primaryColor),
+                const CircleAvatar(
+                  radius: 52,
+                  backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
                 ),
                 const SizedBox(height: 16),
                 Text(AppConfig.appFullName, style: theme.textTheme.headlineMedium),
