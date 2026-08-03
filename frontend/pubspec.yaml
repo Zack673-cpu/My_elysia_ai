@@ -1,7 +1,7 @@
 name: my_elysia_ai
-description: "My Elysia AI - 心理咨询 AI 助手 (Demugo → Cryene → Elysia)"
+description: "My Elysia AI - 生活中的伙伴~ "
 publish_to: 'none'
-version: 0.1.0+1
+version: 2.1.1+1
 
 environment:
   sdk: ^3.8.0
