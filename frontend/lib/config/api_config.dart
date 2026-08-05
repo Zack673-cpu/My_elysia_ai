@@ -13,7 +13,13 @@ class ApiConfig {
   static String get chatStream => '$_baseUrl/api/chat/stream';
   static String get conversations => '$_baseUrl/api/conversations';
   static String conversationDetail(String id) => '$_baseUrl/api/conversations/$id';
+  static String conversationCompress(String id) =>
+      '$_baseUrl/api/conversations/$id/compress';
   static String get search => '$_baseUrl/api/search';
   static String get settings => '$_baseUrl/api/settings';
   static String get health => '$_baseUrl/api/health';
+  static String get dailyToday => '$_baseUrl/api/daily/today';
+  static String get dailyAnswer => '$_baseUrl/api/daily/answer';
+  static String get dailyResolve => '$_baseUrl/api/daily/resolve';
+  static String get news => '$_baseUrl/api/news';
 }

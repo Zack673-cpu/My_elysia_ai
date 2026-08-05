@@ -39,6 +39,7 @@ class Conversation(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     model: str = "deepseek-chat"
+    summary: Optional[str] = None  # 上下文压缩摘要
     metadata: ConversationMetadata = Field(default_factory=ConversationMetadata)
     messages: list[Message] = Field(default_factory=list)
 
@@ -70,10 +71,49 @@ class CreateConversationRequest(BaseModel):
 class SettingsResponse(BaseModel):
     model: str
     base_url: str
+    quiz_topic: str = "前后端全栈"
+    news_scope: str = "AI"
 
 
 class SettingsUpdateRequest(BaseModel):
     model: Optional[str] = None
+    quiz_topic: Optional[str] = None
+    news_scope: Optional[str] = None
+
+
+class DailyAnswerRequest(BaseModel):
+    answer: str
+
+
+class DailyResolveRequest(BaseModel):
+    decision: str  # join_review/skip、decrease/increase、reset/master
+
+
+class DailyState(BaseModel):
+    date: str
+    is_review: bool
+    card_id: int
+    question: str
+    topic: str = ""
+    level: int = 1
+    answered: bool = False
+    resolved: bool = False
+    user_answer: Optional[str] = None
+    feedback: Optional[str] = None
+    suggestion: Optional[str] = None
+    grade: Optional[str] = None  # correct / wrong / partial
+    is_mastery_exam: bool = False
+    # 需要用户弹窗决策的类型：new_question / review_partial / mastery_exam / None
+    decision: Optional[str] = None
+    due_count: int = 0
+
+
+class NewsItemOut(BaseModel):
+    id: int
+    summary: str
+    url: str
+    source_title: str = ""
+    fetched_at: datetime
 
 
 class SearchRequest(BaseModel):

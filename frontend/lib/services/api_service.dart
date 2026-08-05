@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/conversation.dart';
+import '../models/daily.dart';
 import '../models/message.dart';
 
 class ApiService {
@@ -125,10 +126,16 @@ class ApiService {
     throw Exception('获取设置失败: ${response.statusCode}');
   }
 
-  /// 更新设置
-  Future<void> updateSettings({String? model}) async {
+  /// 更新设置（模型 / 问答领域 / 新闻范围）
+  Future<void> updateSettings({
+    String? model,
+    String? quizTopic,
+    String? newsScope,
+  }) async {
     final body = <String, dynamic>{};
     if (model != null) body['model'] = model;
+    if (quizTopic != null) body['quiz_topic'] = quizTopic;
+    if (newsScope != null) body['news_scope'] = newsScope;
     final response = await _client.put(
       Uri.parse(ApiConfig.settings),
       headers: {'Content-Type': 'application/json'},
@@ -152,6 +159,71 @@ class ApiService {
       return List<Map<String, dynamic>>.from(data['results'] ?? []);
     }
     throw Exception('搜索失败: ${response.statusCode}');
+  }
+
+  // ===== 每日问答 =====
+
+  /// 获取今日每日问答题目；forceNew=true 为"再来一题"（消化积压）
+  Future<DailyState> getDailyToday({bool forceNew = false}) async {
+    final uri = Uri.parse(
+      forceNew ? '${ApiConfig.dailyToday}?force_new=true' : ApiConfig.dailyToday,
+    );
+    final response = await _client.get(uri);
+    if (response.statusCode == 200) {
+      return DailyState.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('获取每日问答失败: ${response.statusCode}');
+  }
+
+  /// 提交每日问答答案，返回 AI 评估后的状态
+  Future<DailyState> submitDailyAnswer(String answer) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.dailyAnswer),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'answer': answer}),
+    );
+    if (response.statusCode == 200) {
+      return DailyState.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('提交答案失败: ${response.statusCode}');
+  }
+
+  /// 提交决策弹窗的按钮选择
+  Future<DailyState> resolveDaily(String decision) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.dailyResolve),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'decision': decision}),
+    );
+    if (response.statusCode == 200) {
+      return DailyState.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('提交决策失败: ${response.statusCode}');
+  }
+
+  // ===== 每日新闻 =====
+
+  Future<List<NewsItem>> getNews({int limit = 30}) async {
+    final response = await _client.get(
+      Uri.parse('${ApiConfig.news}?limit=$limit'),
+    );
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List;
+      return list.map((n) => NewsItem.fromJson(n)).toList();
+    }
+    throw Exception('获取新闻失败: ${response.statusCode}');
+  }
+
+  // ===== 上下文压缩 =====
+
+  Future<Map<String, dynamic>> compressConversation(String id) async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.conversationCompress(id)),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('压缩失败: ${response.statusCode}');
   }
 
   void dispose() {

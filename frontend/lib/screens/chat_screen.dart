@@ -7,6 +7,7 @@ import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/typing_indicator.dart';
 import '../screens/conversation_list_screen.dart';
+import '../screens/daily_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/about_screen.dart';
 
@@ -53,6 +54,20 @@ class _ChatScreenState extends State<ChatScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          // 压缩上下文（对话较长时用，防止上下文过长导致响应慢）
+          if (chatProvider.currentConversation != null)
+            IconButton(
+              tooltip: '压缩上下文',
+              icon: const Icon(Icons.compress, size: 20),
+              onPressed: () async {
+                final message = await chatProvider.compressContext();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(message)),
+                  );
+                }
+              },
+            ),
           // 连接状态指示
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -210,6 +225,18 @@ class _ChatScreenState extends State<ChatScreen> {
                 context,
                 MaterialPageRoute(
                     builder: (_) => const ConversationListScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.today),
+            title: const Text('每日'),
+            subtitle: const Text('每日问答与新闻'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DailyScreen()),
               );
             },
           ),

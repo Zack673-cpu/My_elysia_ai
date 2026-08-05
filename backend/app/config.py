@@ -25,29 +25,40 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", alias="HOST")
     port: int = Field(default=8000, alias="PORT")
 
-    # Data directory
-    data_dir: str = Field(default="./data", alias="DATA_DIR")
+    # Data directory（锚定到 backend 目录，避免开机自启等工作目录变化时路径漂移）
+    data_dir: str = Field(
+        default=str(Path(__file__).resolve().parent.parent / "data"), alias="DATA_DIR"
+    )
 
     class Config:
-        env_file = ".env"
+        # 用绝对路径，避免开机自启等工作目录变化时读不到 .env
+        env_file = str(Path(__file__).resolve().parent.parent / ".env")
         env_file_encoding = "utf-8"
         extra = "ignore"
 
     @property
+    def data_dir_path(self) -> Path:
+        path = Path(self.data_dir)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parent.parent / path
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
     def conversations_dir(self) -> Path:
-        path = Path(self.data_dir) / "conversations"
+        path = self.data_dir_path / "conversations"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @property
     def personality_dir(self) -> Path:
-        path = Path(self.data_dir) / "personality"
+        path = self.data_dir_path / "personality"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     @property
     def search_cache_dir(self) -> Path:
-        path = Path(self.data_dir) / "search_cache"
+        path = self.data_dir_path / "search_cache"
         path.mkdir(parents=True, exist_ok=True)
         return path
 

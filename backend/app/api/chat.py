@@ -19,19 +19,19 @@ conv_service = ConversationService()
 
 
 def _prepare_chat(conversation_id: str):
-    """校验对话并返回 (conv, system_prompt, history)"""
+    """校验对话并返回 (conv, system_prompt, history, summary)"""
     conv = conv_service.get_conversation(conversation_id)
     if not conv:
         raise HTTPException(status_code=404, detail="对话不存在")
 
     system_prompt = PromptService.get_prompt()
     history = conv_service.get_history(conversation_id)
-    return conv, system_prompt, history
+    return conv, system_prompt, history, conv.summary
 
 
 async def _process_chat(conversation_id: str, user_message: str) -> dict:
     """处理聊天逻辑：智能体自主决定是否搜索，单轮内生成唯一回复"""
-    conv, system_prompt, history = _prepare_chat(conversation_id)
+    conv, system_prompt, history, summary = _prepare_chat(conversation_id)
 
     # 先持久化用户消息（history 已在上方获取，不含本条，不会重复）
     conv_service.add_message(
@@ -44,6 +44,7 @@ async def _process_chat(conversation_id: str, user_message: str) -> dict:
         system_prompt=system_prompt,
         history=history,
         user_message=user_message,
+        summary=summary,
     )
     if search_performed:
         conv_service.increment_search_count(conversation_id)
@@ -82,7 +83,7 @@ async def send_message(req: ChatRequest):
 @router.post("/stream")
 async def stream_message(req: ChatRequest):
     """发送消息并获取流式回复（SSE）"""
-    conv, system_prompt, history = _prepare_chat(req.conversation_id)
+    conv, system_prompt, history, summary = _prepare_chat(req.conversation_id)
 
     # 先持久化用户消息（history 已在上方获取，不含本条）
     conv_service.add_message(
@@ -99,6 +100,7 @@ async def stream_message(req: ChatRequest):
             system_prompt=system_prompt,
             history=history,
             user_message=req.message,
+            summary=summary,
         ):
             if "content" in evt:
                 full_response += evt["content"]

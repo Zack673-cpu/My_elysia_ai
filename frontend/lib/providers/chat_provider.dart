@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import '../models/message.dart';
 import '../models/conversation.dart';
+import '../services/api_service.dart';
 import '../services/chat_service.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatService _chatService = ChatService();
+  final ApiService _apiService = ApiService();
 
   Conversation? _currentConversation;
   List<Message> _messages = [];
@@ -129,6 +131,19 @@ class ChatProvider extends ChangeNotifier {
       _isLoading = false;
       _error = '发送消息失败: $e';
       notifyListeners();
+    }
+  }
+
+  /// 压缩上下文：把较早的消息总结成摘要，返回后端提示信息
+  Future<String> compressContext() async {
+    if (_currentConversation == null) return '还没有对话';
+    try {
+      final result = await _apiService.compressConversation(
+        _currentConversation!.conversationId,
+      );
+      return result['message'] ?? '压缩完成';
+    } catch (e) {
+      return '压缩失败: $e';
     }
   }
 
