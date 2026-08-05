@@ -60,10 +60,10 @@ class DailyProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 加载最近一周新闻
+  /// 加载最新一批精华新闻（只展示重点，最多 5 条）
   Future<void> loadNews() async {
     try {
-      _news = await _api.getNews();
+      _news = await _api.getNews(limit: 5);
     } catch (_) {
       // 新闻加载失败不打断页面
     }

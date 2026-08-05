@@ -19,9 +19,12 @@ class _DailyScreenState extends State<DailyScreen> {
   @override
   void initState() {
     super.initState();
-    final provider = context.read<DailyProvider>();
-    provider.loadToday();
-    provider.loadNews();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final provider = context.read<DailyProvider>();
+      provider.loadToday();
+      provider.loadNews();
+    });
   }
 
   @override

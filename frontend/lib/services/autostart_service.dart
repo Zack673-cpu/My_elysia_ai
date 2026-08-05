@@ -20,6 +20,7 @@ class AutostartService {
   }
 
   String get _backendBat => '$_scriptDir\\autostart_backend.bat';
+  String get _backendVbs => '$_scriptDir\\autostart_backend.vbs';
   String get _frontendBat => '$_scriptDir\\autostart_frontend.bat';
 
   /// 找一个能用的 Python：where 出来的候选逐个验证 --version，
@@ -81,13 +82,22 @@ class AutostartService {
     try {
       Directory(_scriptDir).createSync(recursive: true);
 
-      // 后端脚本：切到后端目录，隐藏窗口启动 uvicorn（不带热重载）
+      // 后端脚本：切到后端目录，启动 uvicorn（不带热重载）
       // 注意：pythonw 没有控制台，必须把输出重定向到日志文件，
-      // 否则 uvicorn 写日志时找不到 stderr 会直接闪退
+      // 否则 uvicorn 写日志时找不到 stderr 会直接闪退。
+      // 重定向不能放在 start 命令上（不会传给子进程），
+      // 所以直接执行 pythonw，由下面的 VBS 隐藏窗口启动本脚本
       File(_backendBat).writeAsStringSync(
         '@echo off\r\n'
         'cd /d "$backendDir"\r\n'
-        'start /min "" "$python" -m uvicorn app.main:app --host 127.0.0.1 --port $port > "$_scriptDir\\backend.log" 2>&1\r\n',
+        '"$python" -m uvicorn app.main:app --host 127.0.0.1 --port $port > "$_scriptDir\\backend.log" 2>&1\r\n',
+        encoding: const SystemEncoding(),
+      );
+
+      // VBS 隐藏启动器：bat 直接执行会阻塞并留下控制台窗口，
+      // 用 WScript.Shell.Run 以窗口样式 0（完全隐藏）拉起 bat
+      File(_backendVbs).writeAsStringSync(
+        'CreateObject("WScript.Shell").Run """$_backendBat""", 0, False\r\n',
         encoding: const SystemEncoding(),
       );
 
@@ -101,7 +111,7 @@ class AutostartService {
 
       final addBackend = await Process.run('reg', [
         'add', _runKey, '/v', _backendValue, '/t', 'REG_SZ',
-        '/d', '"$_backendBat"', '/f',
+        '/d', '"$_backendVbs"', '/f',
       ]);
       if (addBackend.exitCode != 0) {
         return '注册后端启动项失败（可能被安全软件拦截）';
@@ -124,7 +134,7 @@ class AutostartService {
     for (final value in [_backendValue, _frontendValue]) {
       await Process.run('reg', ['delete', _runKey, '/v', value, '/f']);
     }
-    for (final bat in [_backendBat, _frontendBat]) {
+    for (final bat in [_backendVbs, _backendBat, _frontendBat]) {
       final file = File(bat);
       if (await file.exists()) {
         await file.delete();

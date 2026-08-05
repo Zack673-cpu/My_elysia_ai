@@ -20,9 +20,22 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> init() async {
     _settings = await _storage.loadSettings();
     ApiConfig.setBaseUrl(_settings.baseUrl);
-    await checkConnection();
+    await _checkConnectionWithRetry();
     await _syncBackendSettings();
     notifyListeners();
+  }
+
+  /// 开机自启时后端脚本需要几秒才就绪，未连上时等待重试（最多约 30 秒）
+  Future<void> _checkConnectionWithRetry() async {
+    _isConnected = await _api.checkHealth();
+    notifyListeners();
+    var attempts = 0;
+    while (!_isConnected && attempts < 15) {
+      await Future.delayed(const Duration(seconds: 2));
+      attempts++;
+      _isConnected = await _api.checkHealth();
+      notifyListeners();
+    }
   }
 
   /// 检查后端连接

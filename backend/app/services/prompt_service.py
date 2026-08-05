@@ -1,4 +1,4 @@
-from app.prompts.base import UNIFIED_PSYCHOLOGY_PROMPT
+from app.prompts.base import UNIFIED_PERSONA_PROMPT
 
 
 
@@ -14,4 +14,4 @@ class PromptService:
 
     @staticmethod
     def get_prompt() -> str:
-        return UNIFIED_PSYCHOLOGY_PROMPT
+        return UNIFIED_PERSONA_PROMPT

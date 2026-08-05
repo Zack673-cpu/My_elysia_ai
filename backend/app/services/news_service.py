@@ -8,8 +8,11 @@ from app.services.llm_service import LLMService
 from app.services.search_service import SearchService
 from app.services.settings_service import settings_service
 
-_SUMMARIZE_SYSTEM = """你是一个新闻编辑。从给出的搜索结果中挑选最新、最重要的精华新闻（最多 8 条），
-忽略广告、旧闻、论坛闲聊。对每条入选新闻用一句简体中文概括其核心内容。
+_SUMMARIZE_SYSTEM = """你是一个新闻编辑。用户的专业领域是「{topic}」。
+从给出的搜索结果中挑选最新、最重要的精华新闻（最多 5 条，宁缺毋滥）：
+1. 只保留与用户专业领域相关、或对该领域从业者有价值的新闻，与专业无关的一律不要
+2. 忽略广告、旧闻、论坛闲聊
+3. 对每条入选新闻用一句简体中文概括其核心内容
 只输出 JSON：{"news": [{"index": 搜索结果序号, "summary": "一句话概括"}]}"""
 
 
@@ -40,7 +43,9 @@ class NewsService:
             return 0
 
         scope = settings_service.get_news_scope()
-        queries = [f"{scope} 最新 新闻", f"latest {scope} news"]
+        topic = settings_service.get_quiz_topic()
+        # 搜索关键词结合用户专业领域，从源头让候选新闻更对口
+        queries = [f"{scope} {topic} 最新 新闻", f"latest {scope} news"]
         candidates: list[dict] = []
         seen_urls: set[str] = set()
         for q in queries:
@@ -59,9 +64,11 @@ class NewsService:
         lines = []
         for i, r in enumerate(candidates[:16], 1):
             lines.append(f"{i}. {r.get('title', '')}\n   {r.get('body', '')}")
-        data = await self.llm.ask_json(_SUMMARIZE_SYSTEM, "\n\n".join(lines))
+        data = await self.llm.ask_json(
+            _SUMMARIZE_SYSTEM.replace("{topic}", topic), "\n\n".join(lines)
+        )
 
-        picked = data.get("news", [])
+        picked = data.get("news", [])[:5]
         added = 0
         with Session(engine) as session:
             existing_urls = {
