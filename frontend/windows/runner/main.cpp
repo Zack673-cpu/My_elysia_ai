@@ -1,4 +1,4 @@
-#include <flutter/dart_project.h>
+﻿#include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
@@ -27,8 +27,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  // 窗口标题：产品名，改名时同步修改此处
+  // 窗口标题：产品名，改名时同步修改此处；Debug 编译自动带 [Debug] 后缀
+#if defined(_DEBUG)
+  if (!window.Create(L"My Elysia AI [Debug]", origin, size)) {
+#else
   if (!window.Create(L"My Elysia AI", origin, size)) {
+#endif
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
