@@ -15,10 +15,21 @@ _GEN_SYSTEM = """你是一个专业出题官。在「{topic}」领域出一道�
 1. 难度适中，普通相关专业学生能在两分钟内口头答完
 2. 概念清晰、答案明确，不要出开放式的论述题
 3. 不要与给出的近期题目重复或高度相似
+4. 一定要确保答案正确规范，再三思考确保答案无误之后再出题
 只输出 JSON：{"question": "题目", "reference_answer": "参考答案，不超过三句话"}"""
+
+_VERIFY_SYSTEM = """你是一个专业知识核验员。独立解答下面的问题，不要猜测，反复推敲确保准确。
+只输出 JSON：{"answer": "简洁准确的答案，不超过三句话"}"""
+
+_MERGE_SYSTEM = """你是一个严谨的参考答案终审官。同一道题有两份答案，请反复推敲：
+判断哪份更准确，或综合两者给出最终参考答案；若两份都有错误，必须给出修正后的正确答案。
+只输出 JSON：{"reference_answer": "最终参考答案，不超过三句话"}"""
 
 _EVAL_SYSTEM = """你是一个严谨的答题评估官。根据题目和参考答案评估用户的回答。
 你的反馈将以「昔涟」的口吻呈现：温柔、体贴、多鼓励少指责，即使答错了也要委婉柔和地指出，不打击用户积极性。
+避免过分的夸赞。请记住，你的回答不一定是对的，我的判断也不一定是对的。对待所有问题都要反复推敲，优先保证准确性。
+回答时条理清晰。
+若你有充分把握判断参考答案本身存在错误，必须在 feedback 中明确指出，并给出你认为正确的答案，此时以正确内容为准评估用户回答。
 输出要求：
 1. feedback：第一句话必须先明确判定用户回答是正确、错误还是不够完整，然后再给出具体评价；
    无论用户回答得如何，feedback 中都必须给出本题完整正确的答案（以参考答案为准，可适当展开补充）
@@ -147,9 +158,12 @@ class QuizService:
             user_prompt += "\n近期已出过的题目（避免重复）：\n" + "\n".join(
                 f"- {q}" for q in recent
             )
-        data = await self.llm.ask_json(_GEN_SYSTEM.replace("{topic}", topic), user_prompt)
+        data = await self.llm.ask_json(
+            _GEN_SYSTEM.replace("{topic}", topic), user_prompt, temperature=0.3
+        )
         question = (data.get("question") or "").strip() or f"请简述{topic}领域中的一个核心概念。"
         reference = (data.get("reference_answer") or "").strip()
+        reference = await self._verify_answer(question, reference)
 
         card = QuizCard(topic=topic, question=question, reference_answer=reference, status="pending")
         with Session(engine) as session:
@@ -157,6 +171,23 @@ class QuizService:
             session.commit()
             session.refresh(card)
         return card
+
+    async def _verify_answer(self, question: str, reference: str) -> str:
+        """双盲交叉验证参考答案：先让 AI 只看题目独立作答，再由终审对比两份答案定稿。
+        任一环节失败都回退用原参考答案，保证出题不卡死。"""
+        if not reference:
+            return reference
+        verify = await self.llm.ask_json(_VERIFY_SYSTEM, f"问题：{question}", temperature=0.3)
+        independent = (verify.get("answer") or "").strip()
+        if not independent:
+            return reference
+        merge = await self.llm.ask_json(
+            _MERGE_SYSTEM,
+            f"题目：{question}\n答案A：{reference}\n答案B：{independent}",
+            temperature=0.2,
+        )
+        final = (merge.get("reference_answer") or "").strip()
+        return final or reference
 
     async def answer(self, answer_text: str) -> dict:
         """提交今日题目的答案，AI 评估并自动处置（明确对错时）"""
@@ -174,6 +205,7 @@ class QuizService:
             data = await self.llm.ask_json(
                 _EVAL_SYSTEM,
                 f"题目：{card.question}\n参考答案：{card.reference_answer}\n用户回答：{answer_text}",
+                temperature=0.3,
             )
             grade = data.get("grade")
             if grade not in ("correct", "wrong", "partial"):

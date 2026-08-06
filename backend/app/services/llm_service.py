@@ -20,17 +20,17 @@ class LLMService:
             max_tokens=2048,
         )
 
-    async def ask(self, system: str, user: str) -> str:
-        result = await self.llm.ainvoke([
+    async def ask(self, system: str, user: str, temperature: float = 0.7) -> str:
+        result = await self.llm.bind(temperature=temperature).ainvoke([
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ])
         content = result.content
         return content if isinstance(content, str) else str(content)
 
-    async def ask_json(self, system: str, user: str) -> dict:
+    async def ask_json(self, system: str, user: str, temperature: float = 0.7) -> dict:
         """要求模型输出 JSON 并解析，解析失败返回空字典"""
-        text = await self.ask(system, user)
+        text = await self.ask(system, user, temperature=temperature)
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match:
             return {}

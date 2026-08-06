@@ -1,1 +1,1 @@
-from .base import UNIFIED_PSYCHOLOGY_PROMPT
+from .base import UNIFIED_PERSONA_PROMPT

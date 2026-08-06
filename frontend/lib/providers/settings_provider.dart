@@ -20,13 +20,14 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> init() async {
     _settings = await _storage.loadSettings();
     ApiConfig.setBaseUrl(_settings.baseUrl);
-    await _checkConnectionWithRetry();
+    await checkConnection();
     await _syncBackendSettings();
     notifyListeners();
   }
 
-  /// 开机自启时后端脚本需要几秒才就绪，未连上时等待重试（最多约 30 秒）
-  Future<void> _checkConnectionWithRetry() async {
+  /// 检查后端连接。后端脚本需要几秒才就绪（或中途崩溃后正在恢复），
+  /// 未连上时等待重试（最多约 30 秒），启动和手动「重新检查」共用
+  Future<void> checkConnection() async {
     _isConnected = await _api.checkHealth();
     notifyListeners();
     var attempts = 0;
@@ -36,12 +37,6 @@ class SettingsProvider extends ChangeNotifier {
       _isConnected = await _api.checkHealth();
       notifyListeners();
     }
-  }
-
-  /// 检查后端连接
-  Future<void> checkConnection() async {
-    _isConnected = await _api.checkHealth();
-    notifyListeners();
   }
 
   /// 从后端同步问答领域、新闻范围（后端数据库才是权威来源）
