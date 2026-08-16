@@ -23,7 +23,7 @@ class AboutScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(AppConfig.appFullName, style: theme.textTheme.headlineMedium),
-                Text('你的心灵成长伙伴~',
+                Text('你的全能伙伴~♪',
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     )),

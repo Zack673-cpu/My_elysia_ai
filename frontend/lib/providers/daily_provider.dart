@@ -12,7 +12,6 @@ class DailyProvider extends ChangeNotifier {
   String? _error;
 
   DailyState? get state => _state;
-  List<NewsItem> get news => _news;
   bool get loadingQuestion => _loadingQuestion;
   bool get submitting => _submitting;
   String? get error => _error;
@@ -60,13 +59,33 @@ class DailyProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 加载最新一批精华新闻（只展示重点，最多 5 条）
+  /// 加载最近一周的新闻库
   Future<void> loadNews() async {
     try {
-      _news = await _api.getNews(limit: 5);
+      _news = await _api.getNews(limit: 30);
     } catch (_) {
       // 新闻加载失败不打断页面
     }
     notifyListeners();
+  }
+
+  /// 当天收集到的新闻（每日新闻区展示）
+  List<NewsItem> get todayNews {
+    final now = DateTime.now();
+    return _news.where((n) {
+      final t = n.fetchedAt.toLocal();
+      return t.year == now.year && t.month == now.month && t.day == now.day;
+    }).toList();
+  }
+
+  /// 最近一周收集的新闻（不含当天的，避免与每日新闻重复）
+  List<NewsItem> get weekNews {
+    final now = DateTime.now();
+    final cutoff = now.subtract(const Duration(days: 7));
+    final todayIds = todayNews.map((n) => n.id).toSet();
+    return _news.where((n) {
+      final t = n.fetchedAt.toLocal();
+      return t.isAfter(cutoff) && !todayIds.contains(n.id);
+    }).toList();
   }
 }

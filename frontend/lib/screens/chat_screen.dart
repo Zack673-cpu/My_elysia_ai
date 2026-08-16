@@ -153,12 +153,12 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              '嗨~ 我是昔涟',
+              '嗨~ 我是昔涟♪',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
             Text(
-              '和我聊聊天吧，我什么都会听你说的~',
+              '和我聊聊天吧，我什么都会听你说的♪',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,

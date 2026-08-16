@@ -1,7 +1,13 @@
 import asyncio
+import re
 import time
+import urllib.request
 from datetime import datetime, UTC, timedelta
+from html import unescape
+from typing import Optional
+from urllib.parse import urlparse
 from sqlmodel import Session, select
+from app.config import settings
 from app.db import engine
 from app.models.db_models import NewsItem
 from app.services.llm_service import LLMService
@@ -9,11 +15,134 @@ from app.services.search_service import SearchService
 from app.services.settings_service import settings_service
 
 _SUMMARIZE_SYSTEM = """你是一个新闻编辑。用户的专业领域是「{topic}」。
-从给出的搜索结果中挑选最新、最重要的精华新闻（最多 5 条，宁缺毋滥）：
+下面给出的都是今天发布的新闻，每条附有网页原文摘录，请按重要性挑选最重要的精华新闻（最多 5 条，宁缺毋滥）：
 1. 只保留与用户专业领域相关、或对该领域从业者有价值的新闻，与专业无关的一律不要
-2. 忽略广告、旧闻、论坛闲聊
-3. 对每条入选新闻用一句简体中文概括其核心内容
-只输出 JSON：{"news": [{"index": 搜索结果序号, "summary": "一句话概括"}]}"""
+2. 忽略广告、论坛闲聊
+3. 概括必须忠实于原文内容：外网新闻请先理解原文再翻译成简体中文，准确反映文章主体（如具体应用、具体结论），禁止用空泛说法代替，禁止脑补原文没有的信息
+只输出 JSON：{"news": [{"index": 新闻序号, "summary": "一句话概括"}]}"""
+
+# 路径里带这些段的链接基本是话题/分类列表页，不是单篇文章，直接排除
+_LISTING_PATH_SEGMENTS = {
+    "topic", "topics", "category", "categories", "tag", "tags",
+    "search", "column", "columns", "special", "explore",
+}
+
+# 网页发布时间时间的常见埋点：meta 标签、JSON-LD、<time> 标签
+_DATE_SOURCE_PATTERNS = [
+    r'property=["\']article:published_time["\'][^>]*content=["\']([^"\']+)',
+    r'content=["\']([^"\']+)["\'][^>]*property=["\']article:published_time["\']',
+    r'(?:name|itemprop)=["\']datePublished["\'][^>]*content=["\']([^"\']+)',
+    r'"datePublished"\s*:\s*"([^"]+)"',
+    r'<time[^>]+datetime=["\']([^"\']+)',
+]
+
+
+def _parse_datetime_str(text: str) -> Optional[datetime]:
+    """尽量把各种格式的日期字符串解析成 datetime，解析不了返回 None"""
+    text = text.strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    # 兜底：从字符串里找 yyyy-mm-dd 形式的日期
+    m = re.search(r"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})", text)
+    if m:
+        try:
+            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
+    return None
+
+
+def _fetch_html(url: str, timeout: float = 8.0) -> Optional[str]:
+    """抓取网页 HTML；失败返回 None"""
+    try:
+        handlers = []
+        if settings.search_proxy:
+            handlers.append(urllib.request.ProxyHandler({
+                "http": settings.search_proxy,
+                "https": settings.search_proxy,
+            }))
+        opener = urllib.request.build_opener(*handlers)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,*/*",
+        })
+        with opener.open(req, timeout=timeout) as resp:
+            return resp.read(512 * 1024).decode("utf-8", errors="ignore")
+    except Exception as e:
+        print(f"[NewsService] 获取网页失败 {url}: {e}")
+        return None
+
+
+def _is_listing_url(url: str) -> bool:
+    """URL 路径是否像话题/分类列表页（点开是一堆新闻而不是一篇文章）"""
+    segments = [s.lower() for s in urlparse(url).path.split("/") if s]
+    return bool(_LISTING_PATH_SEGMENTS & set(segments))
+
+
+def _looks_like_listing_page(html: str) -> bool:
+    """页面上带时间的条目太多，说明是新闻列表页而不是单篇文章"""
+    return len(re.findall(r'<time[^>]+datetime=', html, re.IGNORECASE)) > 2
+
+
+def _extract_text(html: str, limit: int = 2000) -> str:
+    """从 HTML 里提取纯文本正文（去脚本样式和标签），供 AI 阅读翻译"""
+    text = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", html)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = unescape(text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:limit]
+
+
+def get_page_publish_time(url: str, timeout: float = 8.0) -> Optional[datetime]:
+    """抓取网页并解析其发布时间；获取不到返回 None。
+
+    只认页面自身标注的时间（meta/JSON-LD/<time>），
+    不用 Last-Modified——列表页会随服务器更新而变，会把旧内容伪装成“今天发布”。
+    """
+    html = _fetch_html(url, timeout)
+    if html is None:
+        return None
+
+    for pattern in _DATE_SOURCE_PATTERNS:
+        m = re.search(pattern, html, re.IGNORECASE)
+        if m:
+            dt = _parse_datetime_str(m.group(1))
+            if dt is not None:
+                return dt
+    return None
+
+
+def inspect_page(url: str) -> tuple[Optional[datetime], str]:
+    """对候选网页只抓取一次，同时拿到发布时间和正文摘录。
+
+    列表页（URL 像列表页，或页面上带时间的条目过多）直接判废，
+    保证入库的新闻点开都是单篇文章。失败/列表页返回 (None, '')。
+    """
+    if _is_listing_url(url):
+        return None, ""
+    html = _fetch_html(url)
+    if html is None or _looks_like_listing_page(html):
+        return None, ""
+    pub = None
+    for pattern in _DATE_SOURCE_PATTERNS:
+        m = re.search(pattern, html, re.IGNORECASE)
+        if m:
+            pub = _parse_datetime_str(m.group(1))
+            if pub is not None:
+                break
+    return pub, _extract_text(html, 800)
 
 
 class NewsService:
@@ -60,37 +189,64 @@ class NewsService:
             print("[NewsService] 搜索无结果，本次跳过")
             return 0
 
-        # AI 筛选精华并一句话概括（最多传 16 条候选，控制上下文量）
+        # 时效性先行：并发检查候选网页（排除列表页），只留电脑当天发布的（最多查 16 条）
+        candidates = candidates[:16]
+        inspections = await asyncio.gather(*[
+            asyncio.to_thread(inspect_page, r.get("href", ""))
+            for r in candidates
+        ])
+        fresh: list[tuple[dict, datetime, str]] = []
+        for r, (pub, text) in zip(candidates, inspections):
+            if pub is not None and self.is_today(pub):
+                fresh.append((r, pub, text))
+            else:
+                print(f"[NewsService] 淘汰候选: {r.get('href', '')}（发布时间: {pub}）")
+
+        if not fresh:
+            print("[NewsService] 候选中没有当天发布的单篇新闻，本次跳过")
+            return self._cleanup_legacy()
+
+        # AI 基于网页原文摘录按重要性挑选并翻译成中文概括
         lines = []
-        for i, r in enumerate(candidates[:16], 1):
-            lines.append(f"{i}. {r.get('title', '')}\n   {r.get('body', '')}")
+        for i, (r, _, text) in enumerate(fresh, 1):
+            excerpt = text or r.get("body", "")
+            lines.append(f"{i}. {r.get('title', '')}\n   原文摘录: {excerpt}")
         data = await self.llm.ask_json(
             _SUMMARIZE_SYSTEM.replace("{topic}", topic), "\n\n".join(lines)
         )
 
         picked = data.get("news", [])[:5]
+        fresh_picks: list[tuple[str, dict, datetime]] = []
+        picked_urls: set[str] = set()
+        for item in picked:
+            try:
+                idx = int(item.get("index")) - 1
+            except (TypeError, ValueError):
+                continue
+            if not (0 <= idx < len(fresh)):
+                continue
+            summary = (item.get("summary") or "").strip()
+            src, pub, _ = fresh[idx]
+            url = src.get("href", "")
+            if summary and url and url not in picked_urls:
+                fresh_picks.append((summary, src, pub))
+                picked_urls.add(url)
+
         added = 0
         with Session(engine) as session:
             existing_urls = {
                 u[0] for u in session.exec(select(NewsItem.url)).all()
             }
-            for item in picked:
-                try:
-                    idx = int(item.get("index")) - 1
-                except (TypeError, ValueError):
-                    continue
-                if not (0 <= idx < len(candidates)):
-                    continue
-                summary = (item.get("summary") or "").strip()
-                src = candidates[idx]
+            for summary, src, pub in fresh_picks:
                 url = src.get("href", "")
-                if not summary or not url or url in existing_urls:
+                if url in existing_urls:
                     continue
                 session.add(
                     NewsItem(
                         summary=summary,
                         url=url,
                         source_title=src.get("title", ""),
+                        published_at=pub,
                     )
                 )
                 existing_urls.add(url)
@@ -104,16 +260,87 @@ class NewsService:
             for item in old_items:
                 session.delete(item)
 
+            # 清理历史脏数据：无发布时间，或发布时间与收集日期对不上的
+            dirty_items = [
+                item for item in session.exec(select(NewsItem)).all()
+                if item.published_at is None or not self._same_day(
+                    item.published_at, item.fetched_at
+                )
+            ]
+            for item in dirty_items:
+                session.delete(item)
+
+            dup_items = self._find_duplicate_items(session)
+            for item in dup_items:
+                session.delete(item)
+
             session.commit()
 
-        print(f"[NewsService] 抓取完成，新增 {added} 条，清理 {len(old_items)} 条过期")
+        print(
+            f"[NewsService] 抓取完成，新增 {added} 条，"
+            f"清理 {len(old_items)} 条过期、{len(dirty_items)} 条脏数据、"
+            f"{len(dup_items)} 条重复"
+        )
         return added
+
+    @staticmethod
+    def _find_duplicate_items(session: Session) -> list[NewsItem]:
+        """找出同 URL 的重复记录（多实例并发抓取可能写重），保留最新一条"""
+        latest_by_url: dict[str, NewsItem] = {}
+        dups: list[NewsItem] = []
+        for item in session.exec(select(NewsItem).order_by(NewsItem.id)).all():
+            prev = latest_by_url.get(item.url)
+            if prev is not None:
+                dups.append(prev)
+            latest_by_url[item.url] = item
+        return dups
+
+    def _cleanup_legacy(self) -> int:
+        """本次没抓到新新闻时，也要把历史脏数据和重复条目清掉"""
+        with Session(engine) as session:
+            dirty_items = [
+                item for item in session.exec(select(NewsItem)).all()
+                if item.published_at is None or not self._same_day(
+                    item.published_at, item.fetched_at
+                )
+            ]
+            for item in dirty_items:
+                session.delete(item)
+            dup_items = self._find_duplicate_items(session)
+            for item in dup_items:
+                session.delete(item)
+            session.commit()
+        if dirty_items or dup_items:
+            print(f"[NewsService] 清理 {len(dirty_items)} 条脏数据、{len(dup_items)} 条重复")
+        return 0
+
+    @staticmethod
+    def _same_day(published: datetime, fetched: datetime) -> bool:
+        """发布时间与收集时间是否算同一天。
+
+        数据库存储会丢时区（发布时间是网站当地钟点，收集时间是 UTC 钟点），
+        裸日期最多可能差一天，所以允许 ±1 天的容差；
+        真正的脏数据（旧闻）差的是几个月，不会被误放。
+        """
+        return abs((published.date() - fetched.date()).days) <= 1
+
+    @staticmethod
+    def is_today(dt: datetime) -> bool:
+        """发布时间是否落在电脑当天（本地时区）"""
+        if dt.tzinfo is not None:
+            dt = dt.astimezone()
+        return dt.date() == datetime.now().date()
 
     def list_news(self, limit: int = 30) -> list[NewsItem]:
         with Session(engine) as session:
-            return session.exec(
+            items = session.exec(
                 select(NewsItem).order_by(NewsItem.fetched_at.desc()).limit(limit)
             ).all()
+        # 库里存的是 UTC 钟点但没带时区标记，补上后前端才能正确换算本地日期
+        for item in items:
+            if item.fetched_at.tzinfo is None:
+                item.fetched_at = item.fetched_at.replace(tzinfo=UTC)
+        return items
 
     @staticmethod
     def query_news(keyword: str, limit: int = 8) -> str:

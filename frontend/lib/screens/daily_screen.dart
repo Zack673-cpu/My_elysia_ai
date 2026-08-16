@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../config/app_config.dart';
 import '../models/daily.dart';
 import '../providers/daily_provider.dart';
 
@@ -15,6 +16,7 @@ class DailyScreen extends StatefulWidget {
 
 class _DailyScreenState extends State<DailyScreen> {
   final TextEditingController _answerController = TextEditingController();
+  bool _weekExpanded = false; // 最近一周新闻是否展开全部
 
   @override
   void initState() {
@@ -107,7 +109,7 @@ class _DailyScreenState extends State<DailyScreen> {
                                   provider.loadToday(forceNew: true);
                                 },
                           icon: const Icon(Icons.refresh, size: 18),
-                          label: Text('再来一题（还有 ${state.dueCount} 道待复习）'),
+                          label: Text('再来一题吧♪（还有 ${state.dueCount} 道待复习哦~）'),
                         ),
                       ),
                     ],
@@ -204,7 +206,7 @@ class _DailyScreenState extends State<DailyScreen> {
                 minLines: 3,
                 enabled: !provider.submitting,
                 decoration: const InputDecoration(
-                  hintText: '写下你的答案…（回车提交，Shift+回车换行）',
+                  hintText: '写下你的答案吧♪',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -238,9 +240,9 @@ class _DailyScreenState extends State<DailyScreen> {
       _ => Colors.orange,
     };
     final gradeText = switch (state.grade) {
-      'correct' => '答对了',
-      'wrong' => '没答上来',
-      _ => '部分正确',
+      'correct' => '答对了！今天的任务就填非常简单♪',
+      'wrong' => '哎呀，没答上来呢...',
+      _ => '好像不太对哦,再仔细看看吧♪',
     };
 
     return Column(
@@ -263,10 +265,12 @@ class _DailyScreenState extends State<DailyScreen> {
         // AI 反馈
         Row(
           children: [
-            Icon(Icons.smart_toy_outlined,
-                size: 18, color: theme.colorScheme.primary),
+            const CircleAvatar(
+              radius: 16,
+              backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
+            ),
             const SizedBox(width: 8),
-            Text('AI 反馈', style: theme.textTheme.titleSmall),
+            Text('爱莉的回应♪ ', style: theme.textTheme.titleSmall),
             const SizedBox(width: 10),
             _chip(context, gradeText, gradeColor.withValues(alpha: 0.15)),
           ],
@@ -315,12 +319,12 @@ class _DailyScreenState extends State<DailyScreen> {
       'new_question' => (
           '这道新题答完了，要把它放进复习计划吗？',
           ('投入轮回历练...', 'join_review'),
-          ('秒了', 'skip'),
+          ('秒了！', 'skip'),
         ),
       'review_partial' => (
           '这题不太好简单判对错，接下来怎么安排？',
           ('再勤快些吧~', 'decrease'),
-          ('可以放松一些', 'increase'),
+          ('可以放松一些!', 'increase'),
         ),
       'mastery_exam' => (
           '这个知识点已经复习很多次了呢，还需要再来一次吗♪',
@@ -375,7 +379,9 @@ class _DailyScreenState extends State<DailyScreen> {
 
   Widget _buildNewsSection(BuildContext context, DailyProvider provider) {
     final theme = Theme.of(context);
-    final news = provider.news;
+    final news = provider.todayNews;
+    final weekNews = provider.weekNews;
+    final visibleWeek = _weekExpanded ? weekNews : weekNews.take(3).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,7 +393,7 @@ class _DailyScreenState extends State<DailyScreen> {
             Text('每日新闻', style: theme.textTheme.titleMedium),
             const Spacer(),
             Text(
-              '只保留最近一周',
+              '只收集当天发布的哦♪',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -396,30 +402,70 @@ class _DailyScreenState extends State<DailyScreen> {
         ),
         const SizedBox(height: 16),
         if (news.isEmpty)
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: Text(
-                  '暂无新闻，后端启动时会自动抓取',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-          )
+          _buildEmptyNewsCard(context, '哎呀，没找到新闻呢，看看最近的吧♪')
         else
           for (final item in news) ...[
             _NewsTile(item: item),
             const SizedBox(height: 12),
           ],
+        const SizedBox(height: 28),
+        Row(
+          children: [
+            Icon(Icons.history, color: theme.colorScheme.primary),
+            const SizedBox(width: 10),
+            Text('最近一周', style: theme.textTheme.titleMedium),
+            const Spacer(),
+            Text(
+              '收集日期距今一周内',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (weekNews.isEmpty)
+          _buildEmptyNewsCard(context, '最近一周也没有收集到新闻哦~')
+        else ...[
+          for (final item in visibleWeek) ...[
+            _NewsTile(item: item),
+            const SizedBox(height: 12),
+          ],
+          if (weekNews.length > 3)
+            Center(
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: () =>
+                    setState(() => _weekExpanded = !_weekExpanded),
+                child: Text(_weekExpanded ? '收起' : '展开全部最近一周的新闻'),
+              ),
+            ),
+        ],
       ],
+    );
+  }
+
+  Widget _buildEmptyNewsCard(BuildContext context, String text) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Text(
+            text,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

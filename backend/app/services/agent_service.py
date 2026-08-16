@@ -14,7 +14,12 @@ from langgraph.prebuilt import create_react_agent
 
 from app.config import settings
 from app.models.schemas import Message, MessageRole
-from app.services.news_service import NewsService
+from app.services.news_service import (
+    NewsService,
+    get_page_publish_time as fetch_page_publish_time,
+    _fetch_html,
+    _extract_text,
+)
 from app.services.search_service import SearchService
 
 
@@ -74,6 +79,44 @@ def query_news(keyword: str) -> str:
     return NewsService.query_news(keyword)
 
 
+@tool
+def get_page_publish_time(url: str) -> str:
+    """获取指定网页（如新闻链接）的发布时间，用来判断一条新闻是不是今天发布的。
+
+    当需要确认某条新闻/网页的时效性，比如用户问“这是今天的新闻吗”时调用。
+
+    Args:
+        url: 新闻或网页的完整链接。
+
+    Returns:
+        网页自身标注的发布时间；获取不到会明确说明。
+    """
+    dt = fetch_page_publish_time(url)
+    if dt is None:
+        return "未能获取该网页的发布时间。"
+    return f"该网页发布时间：{dt.isoformat()}"
+
+
+@tool
+def read_webpage(url: str) -> str:
+    """读取指定网页的正文文本，用于阅读/翻译/核实外网文章的具体内容。
+
+    当需要知道某个链接里到底写了什么（比如翻译外网新闻、核实某条报道的细节）时调用，
+    拿到原文后自行翻译或提炼，不要凭链接猜内容。
+
+    Args:
+        url: 网页的完整链接。
+
+    Returns:
+        网页正文的纯文本摘录；读取失败会明确说明。
+    """
+    html = _fetch_html(url, timeout=10.0)
+    if html is None:
+        return "无法读取该网页，可改用 web_search 搜索相关内容。"
+    text = _extract_text(html, 3000)
+    return text or "该网页没有提取到正文内容。"
+
+
 class AgentService:
     """基于 LangGraph 的工具调用智能体，封装搜索工具。
 
@@ -90,7 +133,13 @@ class AgentService:
             temperature=0.8,
             max_tokens=2048,
         )
-        self.tools = [web_search, get_current_time, query_news]
+        self.tools = [
+            web_search,
+            get_current_time,
+            query_news,
+            get_page_publish_time,
+            read_webpage,
+        ]
 
     def _build_agent(self, system_prompt: str):
         """根据系统提示词构建 react 智能体"""
