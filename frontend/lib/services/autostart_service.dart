@@ -23,9 +23,17 @@ class AutostartService {
   String get _backendVbs => '$_scriptDir\\autostart_backend.vbs';
   String get _frontendBat => '$_scriptDir\\autostart_frontend.bat';
 
-  /// 找一个能用的 Python：where 出来的候选逐个验证 --version，
+  /// 找一个能用的 Python：优先后端目录下的项目虚拟环境（依赖都在里面），
+  /// 找不到再 fallback 到 where 出来的候选逐个验证 --version，
   /// 优先用 pythonw.exe（无控制台窗口）
-  Future<String?> _findPython() async {
+  Future<String?> _findPython(String backendDir) async {
+    // 项目 venv：fastapi/uvicorn 等后端依赖只装在这里，
+    // 系统 Python 启动后端会缺依赖，必须优先
+    for (final name in ['pythonw.exe', 'python.exe']) {
+      final venvPython = '$backendDir\\.venv\\Scripts\\$name';
+      if (await File(venvPython).exists()) return venvPython;
+    }
+
     ProcessResult result;
     try {
       result = await Process.run('where.exe', ['python']);
@@ -71,7 +79,7 @@ class AutostartService {
     required String backendDir,
     required String baseUrl,
   }) async {
-    final python = await _findPython();
+    final python = await _findPython(backendDir);
     if (python == null) {
       return '找不到可用的 Python，请确认已安装并加入 PATH';
     }

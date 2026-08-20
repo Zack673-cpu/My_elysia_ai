@@ -165,6 +165,30 @@ class ConversationService:
             return []
         return conv.messages
 
+    def remove_orphan_user_message(self, conversation_id: str) -> bool:
+        """LLM 失败补偿：删除对话末尾孤立的用户消息（其后没有助手回复）。
+
+        仅当最后一条消息是 user 时才删除，避免误删正常对话；
+        返回是否执行了删除。"""
+        with Session(engine) as session:
+            rec, messages = self._get_records(session, conversation_id)
+            if rec is None or not messages:
+                return False
+            last = messages[-1]
+            if last.role != MessageRole.USER.value:
+                return False
+            session.delete(last)
+            rec.updated_at = datetime.now(UTC)
+            meta = ConversationMetadata(**(rec.metadata_json or {}))
+            meta.message_count = max(
+                0,
+                len([m for m in messages[:-1] if m.role in ("user", "assistant")]),
+            )
+            rec.metadata_json = meta.model_dump()
+            session.add(rec)
+            session.commit()
+            return True
+
     def increment_search_count(self, conversation_id: str) -> None:
         with Session(engine) as session:
             rec = session.get(ConversationRecord, conversation_id)

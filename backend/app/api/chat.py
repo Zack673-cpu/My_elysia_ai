@@ -1,4 +1,6 @@
 import json
+import logging
+
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
@@ -12,6 +14,8 @@ from app.models.schemas import (
 from app.services.agent_service import AgentService
 from app.services.conversation_service import ConversationService
 from app.services.prompt_service import PromptService
+
+logger = logging.getLogger("app.chat")
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 agent_service = AgentService()
@@ -40,11 +44,30 @@ async def _process_chat(conversation_id: str, user_message: str) -> dict:
         content=user_message,
     )
 
-    final_response, search_performed, tokens = await agent_service.chat(
-        system_prompt=system_prompt,
-        history=history,
-        user_message=user_message,
-        summary=summary,
+    try:
+        final_response, search_performed, tokens = await agent_service.chat(
+            system_prompt=system_prompt,
+            history=history,
+            user_message=user_message,
+            summary=summary,
+        )
+    except Exception as e:
+        # 失败补偿：回滚刚写入的孤立用户消息，避免留下半写对话
+        removed = conv_service.remove_orphan_user_message(conversation_id)
+        logger.error(
+            "[chat] conversation_id=%s LLM 调用失败，已%s孤立用户消息: %s",
+            conversation_id,
+            "回滚" if removed else "未能回滚",
+            e,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=502, detail="AI 服务暂时不可用，请重试") from e
+
+    logger.info(
+        "[chat] conversation_id=%s 回复完成 search=%s tokens=%s",
+        conversation_id,
+        search_performed,
+        tokens,
     )
     if search_performed:
         conv_service.increment_search_count(conversation_id)
@@ -96,17 +119,32 @@ async def stream_message(req: ChatRequest):
         full_response = ""
         search_performed = False
 
-        async for evt in agent_service.chat_stream(
-            system_prompt=system_prompt,
-            history=history,
-            user_message=req.message,
-            summary=summary,
-        ):
-            if "content" in evt:
-                full_response += evt["content"]
-                yield {"data": json.dumps({"content": evt["content"], "done": False}, ensure_ascii=False)}
-            elif "search_performed" in evt:
-                search_performed = evt["search_performed"]
+        try:
+            async for evt in agent_service.chat_stream(
+                system_prompt=system_prompt,
+                history=history,
+                user_message=req.message,
+                summary=summary,
+            ):
+                if "content" in evt:
+                    full_response += evt["content"]
+                    yield {"data": json.dumps({"content": evt["content"], "done": False}, ensure_ascii=False)}
+                elif "search_performed" in evt:
+                    search_performed = evt["search_performed"]
+        except Exception as e:
+            # 失败补偿：流中断且未产生任何回复时，回滚孤立用户消息
+            removed = False
+            if not full_response:
+                removed = conv_service.remove_orphan_user_message(req.conversation_id)
+            logger.error(
+                "[chat-stream] conversation_id=%s 流式调用失败，已%s孤立用户消息: %s",
+                req.conversation_id,
+                "回滚" if removed else "未能回滚（已有部分回复）" if full_response else "未能回滚",
+                e,
+                exc_info=True,
+            )
+            yield {"data": json.dumps({"content": "", "done": True, "error": "AI 服务暂时不可用，请重试"}, ensure_ascii=False)}
+            return
 
         if search_performed:
             conv_service.increment_search_count(req.conversation_id)

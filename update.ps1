@@ -9,8 +9,8 @@ $ProjectRoot = $PSScriptRoot
 if (-not $ProjectRoot) { $ProjectRoot = "d:\My_Elysia_ai" }
 $FrontendDir = Join-Path $ProjectRoot "frontend"
 $BackendDir  = Join-Path $ProjectRoot "backend"
-$PythonExe   = "D:\python.exe"
-$UvExe       = "D:\Scripts\uv.exe"
+# 后端依赖装在项目虚拟环境里（重建方式见 启动指南.md）
+$VenvPython  = Join-Path $BackendDir ".venv\Scripts\python.exe"
 $FlutterBin  = "D:\flutter\bin\flutter.bat"
 
 function Log-Step($m) { Write-Host "`n>> $m" -ForegroundColor Cyan }
@@ -42,25 +42,24 @@ if ($UpgradeSDK) {
     }
 }
 
-# === Backend: uv pip install --upgrade ===
+# === Backend: pip install --upgrade ===
 if (-not $FrontendOnly) {
     Log-Step "Updating backend Python deps..."
 
-    if (-not (Test-Path $UvExe)) {
-        Log-Fail "uv not found: $UvExe"; exit 1
+    if (-not (Test-Path $VenvPython)) {
+        Log-Fail "后端虚拟环境不存在: $VenvPython（重建：D:\Python312\python.exe -m venv backend\.venv 后 pip install -r requirements.txt）"; exit 1
     }
 
-    $env:PYTHONPATH = "D:\Lib\site-packages"
     $reqFile = Join-Path $BackendDir "requirements.txt"
-    & $UvExe pip install --python $PythonExe --upgrade --quiet -r $reqFile
+    & $VenvPython -m pip install --upgrade --quiet --disable-pip-version-check -r $reqFile
 
     if ($LASTEXITCODE -eq 0) {
         $doneB = $true
         Log-Ok "Backend dependencies updated"
         Write-Host ""
         try {
-            $out = & $UvExe pip list --python $PythonExe --quiet 2>$null
-            $out | Where-Object { $_ -match "fastapi |uvicorn |openai |duckduckgo-search|pydantic-settings" } | ForEach-Object { Write-Host "   $_" }
+            $out = & $VenvPython -m pip list --quiet --disable-pip-version-check 2>$null
+            $out | Where-Object { $_ -match "fastapi |uvicorn |openai |ddgs|pydantic-settings" } | ForEach-Object { Write-Host "   $_" }
         } catch {}
     } else {
         Log-Fail "Backend update failed"; exit 1

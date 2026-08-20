@@ -1,9 +1,22 @@
-"""后端基础测试"""
-import sys
-sys.path.insert(0, r"D:\Lib\site-packages")
+"""后端基础测试
 
+运行方式（在 backend 目录下，两种方式均可）：
+    python tests\\test_basic.py
+    python -m tests.test_basic
+"""
 import os
-os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sys
+
+# 锚定 backend 目录：无论从哪个工作目录、以哪种方式调用都能导入 app
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+os.chdir(BACKEND_DIR)
+
+# Windows GBK 控制台无法输出 emoji，统一切到 UTF-8
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 def test_imports():

@@ -20,6 +20,11 @@ venv/
 backend/data/conversations/*.json
 backend/data/personality/*.json
 backend/data/search_cache/*.json
+# SQLite 运行时数据库（首次启动自动建表，无需携带）
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm
+backend/data/*.db-journal
 *.lock
 
 # Flutter

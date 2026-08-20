@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -15,6 +16,12 @@ from app.config import APP_FULL_NAME
 from app.db import create_db_and_tables
 from app.services.migration_service import migrate_json_conversations
 from app.services.news_service import news_service
+
+# 开机自启等不经过 run.py 的启动方式也能拿到带时间戳的结构化日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 
 @asynccontextmanager
