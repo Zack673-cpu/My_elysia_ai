@@ -285,6 +285,32 @@ class _DailyScreenState extends State<DailyScreen> {
           state.feedback ?? '',
           style: theme.textTheme.bodyMedium?.copyWith(height: 1.7),
         ),
+        // 答完就展示参考答案（无论对错，不依赖 AI 反馈是否写全）
+        if ((state.referenceAnswer ?? '').isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.lightbulb_outline,
+                    size: 18, color: theme.colorScheme.secondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '参考答案：${state.referenceAnswer}',
+                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         // 复习建议（独立展示，不属于十句反馈）
         if ((state.suggestion ?? '').isNotEmpty) ...[
           const SizedBox(height: 14),

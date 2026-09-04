@@ -5,6 +5,9 @@ class DailyState {
   final int cardId;
   final String question;
   final String topic;
+
+  /// 参考答案（没答上来时前端单独展示，不依赖 AI 反馈是否写全）
+  final String? referenceAnswer;
   final int level;
   final bool answered;
   final bool resolved;
@@ -27,6 +30,7 @@ class DailyState {
     required this.cardId,
     required this.question,
     this.topic = '',
+    this.referenceAnswer,
     this.level = 1,
     this.answered = false,
     this.resolved = false,
@@ -47,6 +51,7 @@ class DailyState {
       cardId: json['card_id'] ?? 0,
       question: json['question'] ?? '',
       topic: json['topic'] ?? '',
+      referenceAnswer: json['reference_answer'],
       level: json['level'] ?? 1,
       answered: json['answered'] ?? false,
       resolved: json['resolved'] ?? false,

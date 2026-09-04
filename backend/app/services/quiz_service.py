@@ -521,6 +521,7 @@ class QuizService:
             "card_id": card.id,
             "question": card.question,
             "topic": card.topic,
+            "reference_answer": card.reference_answer,
             "level": card.level,
             "answered": record.user_answer is not None,
             "resolved": record.resolved,
