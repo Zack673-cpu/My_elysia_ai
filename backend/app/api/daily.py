@@ -15,6 +15,15 @@ async def get_today(force_new: bool = False):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/new", response_model=DailyState)
+async def new_question():
+    """按当前设置领域立即出一道新题（不影响复习排期，走原新题流程）"""
+    try:
+        return await quiz_service.new_question()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/answer", response_model=DailyState)
 async def submit_answer(req: DailyAnswerRequest):
     """提交答案，AI 评估反馈"""

@@ -18,6 +18,9 @@ class DailyState {
   final String? decision;
   final int dueCount;
 
+  /// 今天还没作答的新题数量（"再来一题"连做多道新题用）
+  final int pendingNewCount;
+
   DailyState({
     required this.date,
     required this.isReview,
@@ -34,6 +37,7 @@ class DailyState {
     this.isMasteryExam = false,
     this.decision,
     this.dueCount = 0,
+    this.pendingNewCount = 0,
   });
 
   factory DailyState.fromJson(Map<String, dynamic> json) {
@@ -53,6 +57,7 @@ class DailyState {
       isMasteryExam: json['is_mastery_exam'] ?? false,
       decision: json['decision'],
       dueCount: json['due_count'] ?? 0,
+      pendingNewCount: json['pending_new_count'] ?? 0,
     );
   }
 

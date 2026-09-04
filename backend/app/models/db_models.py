@@ -75,7 +75,9 @@ class QuizRecord(SQLModel, table=True):
     feedback: Optional[str] = None
     suggestion: Optional[str] = None
     grade: Optional[str] = None  # correct / wrong / partial
-    resolved: bool = False  # 用户决策（弹窗按钮）是否已完成
+    # 本题是否已处理完毕：无需弹窗的复习题（答对自动升级/答错自动降级）答完即 True；
+    # 需弹窗决策的（新题投入复习、模糊题升降级、毕业考）在用户点选后才 True
+    resolved: bool = False
 
 
 class NewsItem(SQLModel, table=True):

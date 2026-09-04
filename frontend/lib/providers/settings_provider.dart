@@ -12,9 +12,13 @@ class SettingsProvider extends ChangeNotifier {
 
   AppSettings _settings = const AppSettings();
   bool _isConnected = false;
+  bool _generatingQuiz = false;
+  bool _refreshingNews = false;
 
   AppSettings get settings => _settings;
   bool get isConnected => _isConnected;
+  bool get generatingQuiz => _generatingQuiz;
+  bool get refreshingNews => _refreshingNews;
 
   /// 初始化：加载保存的设置并检查连接
   Future<void> init() async {
@@ -39,16 +43,24 @@ class SettingsProvider extends ChangeNotifier {
     }
   }
 
-  /// 从后端同步问答领域、新闻范围（后端数据库才是权威来源）
+  /// 与后端对齐问答领域、新闻范围。
+  ///
+  /// 保存时是先写本地再写后端，本地始终是用户最后一次修改的值。
+  /// 后端没存过时只会返回代码里的默认值，若反过来用它覆盖本地，
+  /// 用户改的范围每次重开都会被打回默认。所以这里以本地为准，
+  /// 并把本地值回写后端，保证出题/新闻实际用到的后端配置与前端一致。
   Future<void> _syncBackendSettings() async {
     if (!_isConnected) return;
     try {
       final data = await _api.getSettings();
-      _settings = _settings.copyWith(
-        quizTopic: data['quiz_topic'] ?? _settings.quizTopic,
-        newsScope: data['news_scope'] ?? _settings.newsScope,
-      );
-      await _storage.saveSettings(_settings);
+      final localTopic = _settings.quizTopic.trim();
+      final localScope = _settings.newsScope.trim();
+      if (localTopic.isNotEmpty && localTopic != data['quiz_topic']) {
+        await _api.updateSettings(quizTopic: localTopic);
+      }
+      if (localScope.isNotEmpty && localScope != data['news_scope']) {
+        await _api.updateSettings(newsScope: localScope);
+      }
     } catch (_) {}
   }
 
@@ -102,6 +114,49 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 保存出题领域并按新领域立即出一道新题。返回 (是否成功, 提示消息)
+  Future<(bool, String)> generateQuizNow(String topic) async {
+    final trimmed = topic.trim();
+    if (trimmed.isEmpty) return (false, '请先填写出题领域');
+    if (_generatingQuiz) return (false, '正在出题，请稍候');
+    await setQuizTopic(trimmed);
+    _generatingQuiz = true;
+    notifyListeners();
+    try {
+      await _api.newDailyQuestion();
+      return (true, '已按「$trimmed」出新题，去每日页面看看吧♪');
+    } catch (e) {
+      return (false, '出题失败：$e');
+    } finally {
+      _generatingQuiz = false;
+      notifyListeners();
+    }
+  }
+
+  /// 保存新闻范围并按新范围立即重抓新闻。返回 (是否成功, 提示消息)
+  Future<(bool, String)> refreshNewsNow(String scope) async {
+    final trimmed = scope.trim();
+    if (trimmed.isEmpty) return (false, '请先填写新闻范围');
+    if (_refreshingNews) return (false, '正在刷新，请稍候');
+    await setNewsScope(trimmed);
+    _refreshingNews = true;
+    notifyListeners();
+    try {
+      final added = await _api.refreshNews();
+      return (
+        true,
+        added > 0
+            ? '已按「$trimmed」刷新，新增 $added 条♪'
+            : '已按「$trimmed」刷新，暂时没抓到当天新内容'
+      );
+    } catch (e) {
+      return (false, '刷新新闻失败：$e');
+    } finally {
+      _refreshingNews = false;
+      notifyListeners();
+    }
+  }
+
   /// 更新后端目录（开机自启脚本用）
   Future<void> setBackendDir(String dir) async {
     final trimmed = dir.trim();
@@ -116,7 +171,6 @@ class SettingsProvider extends ChangeNotifier {
     if (enabled) {
       final error = await _autostart.enable(
         backendDir: _settings.backendDir,
-        baseUrl: _settings.baseUrl,
       );
       if (error != null) return error;
     } else {

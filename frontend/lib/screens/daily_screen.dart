@@ -97,7 +97,8 @@ class _DailyScreenState extends State<DailyScreen> {
                       const SizedBox(height: 20),
                       _buildDecisionCard(context, provider, state),
                     ],
-                    if (state.isDone && state.dueCount > 0) ...[
+                    if (state.isDone &&
+                        (state.dueCount > 0 || state.pendingNewCount > 0)) ...[
                       const SizedBox(height: 20),
                       Align(
                         alignment: Alignment.centerRight,
@@ -109,7 +110,11 @@ class _DailyScreenState extends State<DailyScreen> {
                                   provider.loadToday(forceNew: true);
                                 },
                           icon: const Icon(Icons.refresh, size: 18),
-                          label: Text('再来一题吧♪（还有 ${state.dueCount} 道待复习哦~）'),
+                          label: Text(
+                            state.dueCount > 0
+                                ? '再来一题吧♪（还有 ${state.dueCount} 道待复习哦~）'
+                                : '再来一题吧♪（还有 ${state.pendingNewCount} 道新题哦~）',
+                          ),
                         ),
                       ),
                     ],

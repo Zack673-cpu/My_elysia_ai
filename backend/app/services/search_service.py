@@ -13,7 +13,8 @@ class SearchService:
     MIN_INTERVAL = 2.0  # 最小搜索间隔（秒）
     # 限定搜索引擎：默认 auto 会轮询到 Google，代理 IP 易被其反爬拦截（403 automated queries）
     # ddgs 内部会按引擎优先级依次尝试，单个引擎失败会自动换下一个
-    BACKENDS = "duckduckgo, bing, brave, startpage"
+    # 注意：ddgs 9.x 已移除 bing，写进去会报 "backends do not exist" 告警
+    BACKENDS = "duckduckgo, brave, startpage"
     TIMEOUT = 8  # 单次搜索超时（秒），走代理比直连慢，ddgs 默认 5 秒偏紧
     MAX_ATTEMPTS = 2  # 全部引擎都失败时的总尝试次数（含首次）
     RETRY_DELAY = 1.5  # 重试前的等待秒数

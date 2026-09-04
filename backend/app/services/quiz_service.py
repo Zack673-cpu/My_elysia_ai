@@ -67,7 +67,7 @@ class QuizService:
         return INTERVALS[max(1, min(level, MAX_LEVEL)) - 1]
 
     def count_due(self) -> int:
-        """当前到期（含积压）的复习卡数量"""
+        """当前到期（含积压）的复习卡数量（只数领域在当前设置范围内的）"""
         with Session(engine) as session:
             cards = session.exec(
                 select(QuizCard).where(
@@ -75,20 +75,27 @@ class QuizService:
                     QuizCard.next_review_date <= self._today(),
                 )
             ).all()
-            return len(cards)
+            return sum(1 for c in cards if self._topic_in_scope(c.topic))
 
     def _pick_due_card(self) -> QuizCard | None:
-        """取一张到期复习卡：优先逾期天数多的，同级取早创建的"""
+        """取一张到期复习卡：优先逾期天数多的，同级取早创建的。
+
+        只挑领域在当前设置范围内的卡：范围外的到期卡先放着，
+        等用户把范围改回（再次包含该领域）时再出。
+        """
         with Session(engine) as session:
-            card = session.exec(
+            cards = session.exec(
                 select(QuizCard)
                 .where(
                     QuizCard.status == "learning",
                     QuizCard.next_review_date <= self._today(),
                 )
                 .order_by(QuizCard.next_review_date, QuizCard.id)
-            ).first()
-            return card
+            ).all()
+        for card in cards:
+            if self._topic_in_scope(card.topic):
+                return card
+        return None
 
     def _get_today_record(self) -> QuizRecord | None:
         """今日最新一条作答记录（"再来一题"支持一天多题，取最新的）"""
@@ -114,31 +121,121 @@ class QuizService:
                 break
         return questions
 
-    # ---- 对外接口 ----
+    # 领域设置里多个主题的常见分隔符（"全栈和四六级英语单词" → 两个领域）
+    _TOPIC_SEPARATORS = ("和", "与", "及", "、", ",", "，", ";", "；", "/", "|")
 
-    async def get_today(self, force_new: bool = False) -> dict:
-        """获取今日题目。优先复习到期卡，无到期卡才出新题。
+    def _split_topics(self, raw: str) -> list[str]:
+        """把领域设置按常见分隔符拆成多个子领域（没匹配到就整体算一个）"""
+        parts = [raw]
+        for sep in self._TOPIC_SEPARATORS:
+            parts = [p for chunk in parts for p in chunk.split(sep)]
+        topics: list[str] = []
+        for p in parts:
+            p = p.strip()
+            if p and p not in topics:
+                topics.append(p)
+        return topics or [raw]
 
-        force_new=True 用于"再来一题"：积压未消化完时继续按逾期优先出复习题。
+    def _pick_topic(self) -> str:
+        """本次出新题用哪个子领域：优先最近没出过的（含"前后端全栈"这种父写法），
+        都出过就接在上一张之后轮换。"""
+        topics = self._split_topics(settings_service.get_quiz_topic())
+        if len(topics) == 1:
+            return topics[0]
+        with Session(engine) as session:
+            recent = session.exec(
+                select(QuizCard.topic).order_by(QuizCard.id.desc()).limit(5)
+            ).all()
+        for t in topics:
+            if not any(t in c or c in t for c in recent):
+                return t
+        if recent:
+            for i, t in enumerate(topics):
+                if t in recent[0] or recent[0] in t:
+                    return topics[(i + 1) % len(topics)]
+        return topics[0]
+
+    def _discard_unanswered(self) -> None:
+        """清理没回答过的题：新题卡（pending）连同记录一起删，不留在库里；
+        复习卡只删作答记录，卡片本身的复习排期保留。"""
+        with Session(engine) as session:
+            records = session.exec(
+                select(QuizRecord).where(QuizRecord.user_answer.is_(None))
+            ).all()
+            for row in records:
+                card = session.get(QuizCard, row.card_id)
+                if card is not None and card.status == "pending":
+                    session.delete(card)
+                session.delete(row)
+            session.commit()
+
+    def _topic_in_scope(self, card_topic: str) -> bool:
+        """卡片的领域是否在当前设置范围内。
+
+        卡片领域和设置都拆成子领域做双向包含匹配；卡片领域是整串
+        （如"全栈和四六级英语单词"）时，要求每个子领域都在当前范围内。
         """
-        record = self._get_today_record()
-        if record and not force_new:
-            return self._build_state(record)
+        topics = self._split_topics(settings_service.get_quiz_topic())
+        return all(
+            any(t in ct or ct in t for t in topics)
+            for ct in self._split_topics(card_topic)
+        )
 
-        # 上一题还有未完成的决策弹窗时，不允许出新题
-        if record and not record.resolved:
-            return self._build_state(record)
+    def _card_topic(self, card_id: int) -> str:
+        with Session(engine) as session:
+            card = session.get(QuizCard, card_id)
+            return card.topic if card else ""
 
-        card = self._pick_due_card()
-        is_review = card is not None
-        if card is None:
-            if force_new:
-                # "再来一题"仅用于消化积压，没有到期卡就不重复出题
-                if record:
-                    return self._build_state(record)
-                raise ValueError("没有到期的复习题")
-            card = await self._generate_new_card()
+    def _today_topics(self) -> set[str]:
+        """今天所有题目（含复习）覆盖到的子领域"""
+        with Session(engine) as session:
+            records = session.exec(
+                select(QuizRecord).where(QuizRecord.asked_date == self._today())
+            ).all()
+            card_ids = [r.card_id for r in records]
+            cards = (
+                session.exec(select(QuizCard).where(QuizCard.id.in_(card_ids))).all()
+                if card_ids
+                else []
+            )
+        covered: set[str] = set()
+        for c in cards:
+            covered.update(self._split_topics(c.topic))
+        return covered
 
+    def _uncovered_topics(self) -> list[str]:
+        """范围内还没出过题的子领域（保持设置里的顺序）"""
+        topics = self._split_topics(settings_service.get_quiz_topic())
+        covered = self._today_topics()
+        return [t for t in topics if not any(t in c or c in t for c in covered)]
+
+    def _get_unanswered_new_today(self) -> QuizRecord | None:
+        """今天最早一道还没作答的新题（"再来一题"连做多道新题用）"""
+        with Session(engine) as session:
+            return session.exec(
+                select(QuizRecord)
+                .where(
+                    QuizRecord.asked_date == self._today(),
+                    QuizRecord.is_review.is_(False),
+                    QuizRecord.user_answer.is_(None),
+                )
+                .order_by(QuizRecord.id)
+            ).first()
+
+    def _count_pending_new_today(self) -> int:
+        """今天还没作答的新题数量（"再来一题"按钮提示用）"""
+        with Session(engine) as session:
+            rows = session.exec(
+                select(QuizRecord.id).where(
+                    QuizRecord.asked_date == self._today(),
+                    QuizRecord.is_review.is_(False),
+                    QuizRecord.user_answer.is_(None),
+                )
+            ).all()
+            return len(rows)
+
+    def _new_record(self, card: QuizCard, is_review: bool) -> QuizRecord:
+        """为卡片建一条今日作答记录"""
         record = QuizRecord(
             card_id=card.id,
             is_review=is_review,
@@ -148,10 +245,111 @@ class QuizService:
             session.add(record)
             session.commit()
             session.refresh(record)
+        return record
+
+    # ---- 对外接口 ----
+
+    async def get_today(self, force_new: bool = False) -> dict:
+        """获取今日题目。优先复习到期卡，无到期卡才出新题。
+
+        force_new=True 用于"再来一题"：积压未消化完时继续按逾期优先出复习题。
+        """
+        record = self._get_today_record()
+        if record and not force_new:
+            if record.user_answer is None:
+                if record.is_review:
+                    # 复习题没答：范围不含就撤下今天的记录（复习卡留库等范围改回再出）
+                    if not self._topic_in_scope(self._card_topic(record.card_id)):
+                        self._discard_unanswered()
+                        record = None
+                elif not self._topic_in_scope(self._card_topic(record.card_id)):
+                    # 全新题没答：范围不含就当没出过，连卡带记录删掉
+                    self._discard_unanswered()
+                    record = None
+                if record is not None:
+                    # 保留未答的题，并补齐范围里还没覆盖的领域：每个领域各出一道新题
+                    topics = self._uncovered_topics()
+                    for t in topics:
+                        card = await self._generate_new_card(topic=t)
+                        self._new_record(card, is_review=False)
+                    if topics:
+                        record = self._get_today_record()
+            elif record.resolved:
+                topics = self._uncovered_topics()
+                if topics:
+                    # 今天的题都做完了，但范围里还有领域没出过题：继续补齐（每领域一道）
+                    for t in topics:
+                        card = await self._generate_new_card(topic=t)
+                        self._new_record(card, is_review=False)
+                    record = self._get_today_record()
+            if record:
+                return self._build_state(record)
+
+        # 上一题还有未完成的决策弹窗时，不允许出新题
+        if record and not record.resolved:
+            return self._build_state(record)
+
+        # 优先到期复习卡，同时把范围里还没覆盖的领域各补一道新题，
+        # 保证一轮下来范围里每个领域都有一道
+        card = self._pick_due_card()
+        if card is not None:
+            record = self._new_record(card, is_review=True)
+            topics = self._uncovered_topics()
+            for t in topics:
+                new_card = await self._generate_new_card(topic=t)
+                self._new_record(new_card, is_review=False)
+            if topics:
+                record = self._get_today_record()
+            return self._build_state(record)
+
+        if force_new:
+            # "再来一题"：优先消化复习积压；没有积压就继续做今天还没答的新题
+            pending = self._get_unanswered_new_today()
+            if pending:
+                return self._build_state(pending)
+            if record:
+                return self._build_state(record)
+            raise ValueError("没有到期的复习题")
+
+        # 没有到期复习卡：清掉历史没回答过的题，按范围每个领域各出一道
+        self._discard_unanswered()
+        topics = self._uncovered_topics() or [self._pick_topic()]
+        for t in topics:
+            card = await self._generate_new_card(topic=t)
+            self._new_record(card, is_review=False)
+        record = self._get_today_record()
         return self._build_state(record)
 
-    async def _generate_new_card(self) -> QuizCard:
-        topic = settings_service.get_quiz_topic()
+    async def new_question(self) -> dict:
+        """按当前设置领域立即出一道新题：不消耗到期复习卡，走原新题流程。
+
+        用户在设置里改了领域想马上出题时用；艾宾浩斯复习排期完全不受影响，
+        新题答完仍会弹窗问是否投入复习。
+        """
+        # 今天没回答的题：新题直接抛弃；复习题看新范围还包不包含它的领域——
+        # 包含就保留（新题照出，复习题等答完新题后用"再来一题"继续答），
+        # 不包含才丢掉今天的记录（复习卡本身保留，等范围改回时再出）。
+        # 已作答但决策弹窗没点的仍要求先处理，否则卡片会悬在库里。
+        record = self._get_today_record()
+        if record and record.user_answer is None:
+            keep_review = (
+                record.is_review
+                and self._topic_in_scope(self._card_topic(record.card_id))
+            )
+            if not keep_review:
+                self._discard_unanswered()
+        elif record and not record.resolved:
+            raise ValueError("今天已作答的题还没点决策弹窗，先去每日页处理完再出新题")
+        # 按范围出题：每个领域各出一道；今天已覆盖过的领域跳过，全覆盖则整轮再出
+        topics = self._uncovered_topics() or self._split_topics(settings_service.get_quiz_topic())
+        for t in topics:
+            card = await self._generate_new_card(topic=t)
+            self._new_record(card, is_review=False)
+        record = self._get_today_record()
+        return self._build_state(record)
+
+    async def _generate_new_card(self, topic: str | None = None) -> QuizCard:
+        topic = topic or self._pick_topic()
         recent = self._recent_questions()
         user_prompt = "领域：" + topic
         if recent:
@@ -228,11 +426,16 @@ class QuizService:
                     else:
                         card.level += 1
                         card.next_review_date = self._add_days(self._interval(card.level))
+                        # 自动升级、没有决策弹窗，答完即算处理完成；
+                        # 否则 resolved 恒为 False 会挡住当天“再来一题”继续清积压
+                        record.resolved = True
                 elif grade == "wrong":
                     # 答错只降一级，次日重问
                     card.level = max(1, card.level - 1)
                     card.next_review_date = self._add_days(1)
-                # partial：不自动升降级，等用户弹窗决策
+                    # 自动降级、没有决策弹窗，答完即算处理完成
+                    record.resolved = True
+                # partial：不自动升降级，等用户弹窗决策（resolved 保持 False）
             else:
                 # 新题：等用户弹窗决定是否投入复习，暂不排期
                 pass
@@ -328,6 +531,7 @@ class QuizService:
             "is_mastery_exam": (decision == "mastery_exam"),
             "decision": decision,
             "due_count": due_count,
+            "pending_new_count": self._count_pending_new_today(),
         }
 
 

@@ -1,9 +1,93 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/daily_provider.dart';
 import '../providers/settings_provider.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  late final SettingsProvider _provider;
+  late final TextEditingController _quizController;
+  late final TextEditingController _newsController;
+  late final TextEditingController _baseUrlController;
+  late final TextEditingController _backendDirController;
+  late final FocusNode _quizFocus;
+  late final FocusNode _newsFocus;
+  late final FocusNode _baseUrlFocus;
+  late final FocusNode _backendDirFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    _provider = context.read<SettingsProvider>();
+    final s = _provider.settings;
+    _quizController = TextEditingController(text: s.quizTopic);
+    _newsController = TextEditingController(text: s.newsScope);
+    _baseUrlController = TextEditingController(text: s.baseUrl);
+    _backendDirController = TextEditingController(text: s.backendDir);
+    _quizFocus = FocusNode()..addListener(_onQuizBlur);
+    _newsFocus = FocusNode()..addListener(_onNewsBlur);
+    _baseUrlFocus = FocusNode();
+    _backendDirFocus = FocusNode();
+    // 只在输入框没有焦点时把提供者的值同步进来：
+    // 既覆盖"本地设置加载完成"的初始化，又避免打字打到一半
+    // 被 checkConnection 定时 notifyListeners 重建冲掉
+    _provider.addListener(_syncFromProvider);
+  }
+
+  /// 出题领域失焦即保存（改完点别处就存，不用非按回车）
+  void _onQuizBlur() {
+    if (_quizFocus.hasFocus) return;
+    final value = _quizController.text.trim();
+    if (value.isNotEmpty && value != _provider.settings.quizTopic) {
+      _provider.setQuizTopic(value);
+    }
+  }
+
+  /// 新闻范围失焦即保存
+  void _onNewsBlur() {
+    if (_newsFocus.hasFocus) return;
+    final value = _newsController.text.trim();
+    if (value.isNotEmpty && value != _provider.settings.newsScope) {
+      _provider.setNewsScope(value);
+    }
+  }
+
+  void _syncFromProvider() {
+    final s = _provider.settings;
+    if (!_quizFocus.hasFocus && _quizController.text != s.quizTopic) {
+      _quizController.text = s.quizTopic;
+    }
+    if (!_newsFocus.hasFocus && _newsController.text != s.newsScope) {
+      _newsController.text = s.newsScope;
+    }
+    if (!_baseUrlFocus.hasFocus && _baseUrlController.text != s.baseUrl) {
+      _baseUrlController.text = s.baseUrl;
+    }
+    if (!_backendDirFocus.hasFocus &&
+        _backendDirController.text != s.backendDir) {
+      _backendDirController.text = s.backendDir;
+    }
+  }
+
+  @override
+  void dispose() {
+    _provider.removeListener(_syncFromProvider);
+    _quizController.dispose();
+    _newsController.dispose();
+    _baseUrlController.dispose();
+    _backendDirController.dispose();
+    _quizFocus.dispose();
+    _newsFocus.dispose();
+    _baseUrlFocus.dispose();
+    _backendDirFocus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +101,8 @@ class SettingsScreen extends StatelessWidget {
           // 后端连接
           _Section(title: '服务器', children: [
             TextField(
-              controller: TextEditingController(text: settings.settings.baseUrl),
+              controller: _baseUrlController,
+              focusNode: _baseUrlFocus,
               decoration: const InputDecoration(
                 labelText: '后端地址',
                 hintText: 'http://localhost:8000',
@@ -26,8 +111,8 @@ class SettingsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             TextField(
-              controller:
-                  TextEditingController(text: settings.settings.backendDir),
+              controller: _backendDirController,
+              focusNode: _backendDirFocus,
               decoration: const InputDecoration(
                 labelText: '后端目录',
                 hintText: r'D:\My_Elysia_ai\backend',
@@ -88,14 +173,38 @@ class SettingsScreen extends StatelessWidget {
           // 每日问答
           _Section(title: '每日问答', children: [
             TextField(
-              controller:
-                  TextEditingController(text: settings.settings.quizTopic),
+              controller: _quizController,
+              focusNode: _quizFocus,
               decoration: const InputDecoration(
                 labelText: '出题领域',
                 hintText: '前后端全栈',
-                helperText: '没有到期复习题时，AI 按这个领域出新题',
+                helperText: '多个领域用「和」分隔会交替出题；改完点别处自动保存',
               ),
               onSubmitted: (value) => settings.setQuizTopic(value),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: settings.generatingQuiz
+                    ? null
+                    : () async {
+                        final (ok, msg) =
+                            await settings.generateQuizNow(_quizController.text);
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text(msg)));
+                        if (ok) context.read<DailyProvider>().loadToday();
+                      },
+                icon: settings.generatingQuiz
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_awesome, size: 18),
+                label: Text(settings.generatingQuiz ? '出题中…' : '按此领域立即出题'),
+              ),
             ),
           ]),
 
@@ -104,14 +213,38 @@ class SettingsScreen extends StatelessWidget {
           // 每日新闻
           _Section(title: '每日新闻', children: [
             TextField(
-              controller:
-                  TextEditingController(text: settings.settings.newsScope),
+              controller: _newsController,
+              focusNode: _newsFocus,
               decoration: const InputDecoration(
                 labelText: '新闻范围',
                 hintText: 'AI',
-                helperText: '后端开机启动时按这个范围抓取最新新闻',
+                helperText: '改完点别处就自动保存；点下方按钮可立即重抓',
               ),
               onSubmitted: (value) => settings.setNewsScope(value),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: settings.refreshingNews
+                    ? null
+                    : () async {
+                        final (ok, msg) =
+                            await settings.refreshNewsNow(_newsController.text);
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text(msg)));
+                        if (ok) context.read<DailyProvider>().loadNews();
+                      },
+                icon: settings.refreshingNews
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh, size: 18),
+                label: Text(settings.refreshingNews ? '抓取中…可能要几十秒' : '按此范围立即刷新'),
+              ),
             ),
           ]),
 

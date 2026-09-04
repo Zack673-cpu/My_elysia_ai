@@ -2,3 +2,12 @@ analysis_options:
   rules:
     prefer_const_constructors: true
     prefer_const_declarations: true
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**

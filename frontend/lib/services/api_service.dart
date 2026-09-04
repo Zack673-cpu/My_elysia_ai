@@ -175,6 +175,23 @@ class ApiService {
     throw Exception('获取每日问答失败: ${response.statusCode}');
   }
 
+  /// 按当前领域立即出一道新题（走新题流程，不影响复习排期）
+  Future<DailyState> newDailyQuestion() async {
+    final response = await _client.post(Uri.parse(ApiConfig.dailyNew));
+    if (response.statusCode == 200) {
+      return DailyState.fromJson(jsonDecode(response.body));
+    }
+    // 400 时把后端返回的原因透给用户（如"今天还有未完成的题目"）
+    var msg = '${response.statusCode}';
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && body['detail'] != null) {
+        msg = '${body['detail']}';
+      }
+    } catch (_) {}
+    throw Exception('出题失败：$msg');
+  }
+
   /// 提交每日问答答案，返回 AI 评估后的状态
   Future<DailyState> submitDailyAnswer(String answer) async {
     final response = await _client.post(
@@ -212,6 +229,17 @@ class ApiService {
       return list.map((n) => NewsItem.fromJson(n)).toList();
     }
     throw Exception('获取新闻失败: ${response.statusCode}');
+  }
+
+  /// 按当前范围立即重新抓取新闻，返回新增条数（抓取较慢，给足超时）
+  Future<int> refreshNews() async {
+    final response = await _client
+        .post(Uri.parse(ApiConfig.newsRefresh))
+        .timeout(const Duration(seconds: 120));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['added'] ?? 0;
+    }
+    throw Exception('刷新新闻失败: ${response.statusCode}');
   }
 
   // ===== 上下文压缩 =====

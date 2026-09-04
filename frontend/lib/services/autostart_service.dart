@@ -1,15 +1,17 @@
 import 'dart:io';
 
-/// Windows 开机自启动：往用户级注册表 HKCU\...\Run 写两条启动项。
+/// Windows 开机自启动：往用户级注册表 HKCU\...\Run 写一条启动项。
 ///
-/// 后端先启动（隐藏窗口跑 uvicorn），前端延迟 2 秒再启动。
-/// 为避免注册表命令的引号转义问题，实际启动逻辑写在两个 .bat 脚本里，
-/// 注册表只登记脚本路径，关闭开关即删除注册项。
+/// 注册表只登记一个隐藏启动器 VBS，它拉起项目根目录的 start_app.bat：
+/// 后端没起就先静默启动后端 → 启动前端 → 前端退出后同步关闭后端。
+/// 关闭开关即删除注册项；同时清理旧版前后端分离的启动项与脚本。
 class AutostartService {
   static const _runKey =
       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run';
-  static const _backendValue = 'MyElysiaBackend';
-  static const _frontendValue = 'MyElysiaFrontend';
+  static const _appValue = 'MyElysiaApp';
+
+  /// 旧版（前后端分离）启动项，disable/重新 enable 时一并清理
+  static const _legacyValues = ['MyElysiaBackend', 'MyElysiaFrontend'];
 
   /// 默认后端目录（与本机项目位置一致，可在设置里改）
   static const defaultBackendDir = r'D:\My_Elysia_ai\backend';
@@ -19,117 +21,53 @@ class AutostartService {
     return '$local\\MyElysiaAI';
   }
 
-  String get _backendBat => '$_scriptDir\\autostart_backend.bat';
-  String get _backendVbs => '$_scriptDir\\autostart_backend.vbs';
-  String get _frontendBat => '$_scriptDir\\autostart_frontend.bat';
+  String get _launcherVbs => '$_scriptDir\\autostart_app.vbs';
+  String get _legacyBackendBat => '$_scriptDir\\autostart_backend.bat';
+  String get _legacyBackendVbs => '$_scriptDir\\autostart_backend.vbs';
+  String get _legacyFrontendBat => '$_scriptDir\\autostart_frontend.bat';
 
-  /// 找一个能用的 Python：优先后端目录下的项目虚拟环境（依赖都在里面），
-  /// 找不到再 fallback 到 where 出来的候选逐个验证 --version，
-  /// 优先用 pythonw.exe（无控制台窗口）
-  Future<String?> _findPython(String backendDir) async {
-    // 项目 venv：fastapi/uvicorn 等后端依赖只装在这里，
-    // 系统 Python 启动后端会缺依赖，必须优先
-    for (final name in ['pythonw.exe', 'python.exe']) {
-      final venvPython = '$backendDir\\.venv\\Scripts\\$name';
-      if (await File(venvPython).exists()) return venvPython;
-    }
-
-    ProcessResult result;
-    try {
-      result = await Process.run('where.exe', ['python']);
-    } catch (_) {
-      return null;
-    }
-    if (result.exitCode != 0) return null;
-
-    final candidates = (result.stdout as String)
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.toLowerCase().endsWith('python.exe'));
-    for (final candidate in candidates) {
-      try {
-        final test = await Process.run(candidate, ['--version']);
-        if (test.exitCode != 0) continue;
-      } catch (_) {
-        continue;
-      }
-      final windowless = candidate.replaceFirst(
-        RegExp(r'python\.exe$', caseSensitive: false),
-        'pythonw.exe',
-      );
-      if (await File(windowless).exists()) return windowless;
-      return candidate;
-    }
-    return null;
-  }
-
-  int _parsePort(String baseUrl) {
-    final match = RegExp(r':(\d+)\s*$').firstMatch(baseUrl);
-    return match != null ? int.parse(match.group(1)!) : 8000;
-  }
-
-  Future<bool> isEnabled() async {
-    final result = await Process.run('reg', ['query', _runKey, '/v', _frontendValue]);
+  Future<bool> _regValueExists(String value) async {
+    final result = await Process.run('reg', ['query', _runKey, '/v', value]);
     return result.exitCode == 0;
   }
 
-  /// 注册开机自启。backendDir 为后端目录，baseUrl 用于解析端口。
-  /// 返回 null 表示成功，否则返回失败原因。
-  Future<String?> enable({
-    required String backendDir,
-    required String baseUrl,
-  }) async {
-    final python = await _findPython(backendDir);
-    if (python == null) {
-      return '找不到可用的 Python，请确认已安装并加入 PATH';
+  Future<bool> isEnabled() async {
+    if (await _regValueExists(_appValue)) return true;
+    for (final legacy in _legacyValues) {
+      if (await _regValueExists(legacy)) return true;
     }
+    return false;
+  }
 
-    final exePath = Platform.resolvedExecutable;
-    final port = _parsePort(baseUrl);
+  /// 注册开机自启。backendDir 用于定位项目根目录下的 start_app.bat。
+  /// 返回 null 表示成功，否则返回失败原因。
+  Future<String?> enable({required String backendDir}) async {
+    final launcher = '${File(backendDir).parent.path}\\start_app.bat';
+    if (!File(launcher).existsSync()) {
+      return '找不到统一启动脚本: $launcher';
+    }
 
     try {
       Directory(_scriptDir).createSync(recursive: true);
 
-      // 后端脚本：切到后端目录，启动 uvicorn（不带热重载）
-      // 注意：pythonw 没有控制台，必须把输出重定向到日志文件，
-      // 否则 uvicorn 写日志时找不到 stderr 会直接闪退。
-      // 重定向不能放在 start 命令上（不会传给子进程），
-      // 所以直接执行 pythonw，由下面的 VBS 隐藏窗口启动本脚本
-      File(_backendBat).writeAsStringSync(
-        '@echo off\r\n'
-        'cd /d "$backendDir"\r\n'
-        '"$python" -m uvicorn app.main:app --host 127.0.0.1 --port $port > "$_scriptDir\\backend.log" 2>&1\r\n',
+      // VBS 隐藏启动器：bat 里有等待逻辑会一直占用控制台，
+      // 用 WScript.Shell.Run 以窗口样式 0（完全隐藏）拉起
+      File(_launcherVbs).writeAsStringSync(
+        'CreateObject("WScript.Shell").Run """$launcher""", 0, False\r\n',
         encoding: const SystemEncoding(),
       );
 
-      // VBS 隐藏启动器：bat 直接执行会阻塞并留下控制台窗口，
-      // 用 WScript.Shell.Run 以窗口样式 0（完全隐藏）拉起 bat
-      File(_backendVbs).writeAsStringSync(
-        'CreateObject("WScript.Shell").Run """$_backendBat""", 0, False\r\n',
-        encoding: const SystemEncoding(),
-      );
-
-      // 前端脚本：等 2 秒让后端就绪，再启动前端
-      File(_frontendBat).writeAsStringSync(
-        '@echo off\r\n'
-        'timeout /t 2 /nobreak >nul\r\n'
-        'start "" "$exePath"\r\n',
-        encoding: const SystemEncoding(),
-      );
-
-      final addBackend = await Process.run('reg', [
-        'add', _runKey, '/v', _backendValue, '/t', 'REG_SZ',
-        '/d', '"$_backendVbs"', '/f',
-      ]);
-      if (addBackend.exitCode != 0) {
-        return '注册后端启动项失败（可能被安全软件拦截）';
+      // 清掉旧版分离式启动项，避免新旧同时生效启动两遍
+      for (final legacy in _legacyValues) {
+        await Process.run('reg', ['delete', _runKey, '/v', legacy, '/f']);
       }
-      final addFrontend = await Process.run('reg', [
-        'add', _runKey, '/v', _frontendValue, '/t', 'REG_SZ',
-        '/d', '"$_frontendBat"', '/f',
+
+      final add = await Process.run('reg', [
+        'add', _runKey, '/v', _appValue, '/t', 'REG_SZ',
+        '/d', '"$_launcherVbs"', '/f',
       ]);
-      if (addFrontend.exitCode != 0) {
-        return '注册前端启动项失败（可能被安全软件拦截）';
+      if (add.exitCode != 0) {
+        return '注册开机启动项失败（可能被安全软件拦截）';
       }
       return null;
     } catch (e) {
@@ -137,13 +75,18 @@ class AutostartService {
     }
   }
 
-  /// 移除开机自启（注册项 + 脚本文件）
+  /// 移除开机自启（注册项 + 脚本文件，含旧版遗留）
   Future<void> disable() async {
-    for (final value in [_backendValue, _frontendValue]) {
+    for (final value in [_appValue, ..._legacyValues]) {
       await Process.run('reg', ['delete', _runKey, '/v', value, '/f']);
     }
-    for (final bat in [_backendVbs, _backendBat, _frontendBat]) {
-      final file = File(bat);
+    for (final path in [
+      _launcherVbs,
+      _legacyBackendBat,
+      _legacyBackendVbs,
+      _legacyFrontendBat,
+    ]) {
+      final file = File(path);
       if (await file.exists()) {
         await file.delete();
       }
