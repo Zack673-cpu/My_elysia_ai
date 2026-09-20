@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'config/app_config.dart';
 import 'config/theme.dart';
@@ -30,6 +31,14 @@ class MyElysiaAi extends StatelessWidget {
           return MaterialApp(
             title: AppConfig.appFullName,
             debugShowCheckedModeBanner: false,
+            // 中文本地化：让内置提示（如"打开导航菜单"）也显示中文
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh'), Locale('en')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: settings.settings.isDarkMode

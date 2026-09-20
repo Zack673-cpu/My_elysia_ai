@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../config/app_config.dart';
+import '../config/theme.dart';
+import '../widgets/gradient_background.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -8,18 +10,34 @@ class AboutScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('关于')),
-      body: ListView(
+    return GradientBackground(
+      child: Scaffold(
+        appBar: AppBar(title: const Text('关于')),
+        body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Logo & Title
           Center(
             child: Column(
               children: [
-                const CircleAvatar(
-                  radius: 52,
-                  backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
+                // 渐变光环头像
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: AppTheme.brandGradient,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const CircleAvatar(
+                    radius: 46,
+                    backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(AppConfig.appFullName, style: theme.textTheme.headlineMedium),
@@ -74,6 +92,7 @@ class AboutScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

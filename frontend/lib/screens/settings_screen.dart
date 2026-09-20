@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/daily_provider.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/gradient_background.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -93,13 +95,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+    return GradientBackground(
+      child: Scaffold(
+        appBar: AppBar(title: const Text('设置')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
           // 后端连接
-          _Section(title: '服务器', children: [
+          _Section(title: '服务器', icon: Icons.dns_outlined, children: [
             TextField(
               controller: _baseUrlController,
               focusNode: _baseUrlFocus,
@@ -147,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // 模型选择
-          _Section(title: '模型', children: [
+          _Section(title: '模型', icon: Icons.smart_toy_outlined, children: [
             RadioGroup<String>(
               groupValue: settings.settings.model,
               onChanged: (String? v) => settings.setModel(v!),
@@ -171,7 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // 每日问答
-          _Section(title: '每日问答', children: [
+          _Section(title: '每日问答', icon: Icons.quiz_outlined, children: [
             TextField(
               controller: _quizController,
               focusNode: _quizFocus,
@@ -185,7 +188,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.icon(
+              child: GradientButton(
+                label: settings.generatingQuiz ? '出题中…' : '按此领域立即出题',
+                icon: Icons.auto_awesome,
+                loading: settings.generatingQuiz,
                 onPressed: settings.generatingQuiz
                     ? null
                     : () async {
@@ -196,14 +202,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             .showSnackBar(SnackBar(content: Text(msg)));
                         if (ok) context.read<DailyProvider>().loadToday();
                       },
-                icon: settings.generatingQuiz
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.auto_awesome, size: 18),
-                label: Text(settings.generatingQuiz ? '出题中…' : '按此领域立即出题'),
               ),
             ),
           ]),
@@ -211,7 +209,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // 每日新闻
-          _Section(title: '每日新闻', children: [
+          _Section(title: '每日新闻', icon: Icons.newspaper_outlined, children: [
             TextField(
               controller: _newsController,
               focusNode: _newsFocus,
@@ -225,7 +223,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.icon(
+              child: GradientButton(
+                label: settings.refreshingNews ? '抓取中…可能要几十秒' : '按此范围立即刷新',
+                icon: Icons.refresh,
+                loading: settings.refreshingNews,
                 onPressed: settings.refreshingNews
                     ? null
                     : () async {
@@ -236,14 +237,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             .showSnackBar(SnackBar(content: Text(msg)));
                         if (ok) context.read<DailyProvider>().loadNews();
                       },
-                icon: settings.refreshingNews
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh, size: 18),
-                label: Text(settings.refreshingNews ? '抓取中…可能要几十秒' : '按此范围立即刷新'),
               ),
             ),
           ]),
@@ -251,7 +244,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // 外观
-          _Section(title: '外观', children: [
+          _Section(title: '外观', icon: Icons.palette_outlined, children: [
             SwitchListTile(
               title: const Text('深色模式'),
               value: settings.settings.isDarkMode,
@@ -262,7 +255,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
 
           // 开机自启动
-          _Section(title: '开机自启动', children: [
+          _Section(title: '开机自启动', icon: Icons.power_settings_new, children: [
             SwitchListTile(
               title: const Text('开机自动启动'),
               subtitle: const Text('开机先启动后端服务，两秒后启动本应用'),
@@ -278,6 +271,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
         ],
+        ),
       ),
     );
   }
@@ -285,9 +279,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 class _Section extends StatelessWidget {
   final String title;
+  final IconData icon;
   final List<Widget> children;
 
-  const _Section({required this.title, required this.children});
+  const _Section({
+    required this.title,
+    required this.icon,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -295,15 +294,23 @@ class _Section extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+          padding: const EdgeInsets.only(left: 4, bottom: 10),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
           ),
         ),
         Card(
+          margin: EdgeInsets.zero,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(children: children),

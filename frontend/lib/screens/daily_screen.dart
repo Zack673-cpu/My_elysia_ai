@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/app_config.dart';
 import '../models/daily.dart';
 import '../providers/daily_provider.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/gradient_background.dart';
 
 /// 每日页面：上半部分是今日问答，往下划是每日新闻
 class DailyScreen extends StatefulWidget {
@@ -44,20 +46,22 @@ class _DailyScreenState extends State<DailyScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<DailyProvider>();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('每日')),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await provider.loadToday();
-          await provider.loadNews();
-        },
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          children: [
-            _buildQuizCard(context, provider),
-            const SizedBox(height: 32),
-            _buildNewsSection(context, provider),
-          ],
+    return GradientBackground(
+      child: Scaffold(
+        appBar: AppBar(title: const Text('每日')),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            await provider.loadToday();
+            await provider.loadNews();
+          },
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            children: [
+              _buildQuizCard(context, provider),
+              const SizedBox(height: 32),
+              _buildNewsSection(context, provider),
+            ],
+          ),
         ),
       ),
     );
@@ -212,7 +216,6 @@ class _DailyScreenState extends State<DailyScreen> {
                 enabled: !provider.submitting,
                 decoration: const InputDecoration(
                   hintText: '写下你的答案吧♪',
-                  border: OutlineInputBorder(),
                 ),
               ),
             ),
@@ -221,16 +224,11 @@ class _DailyScreenState extends State<DailyScreen> {
         const SizedBox(height: 16),
         Align(
           alignment: Alignment.centerRight,
-          child: FilledButton.icon(
+          child: GradientButton(
+            label: provider.submitting ? 'AI 评估中…' : '提交',
+            icon: Icons.send_rounded,
+            loading: provider.submitting,
             onPressed: provider.submitting ? null : () => _submit(provider),
-            icon: provider.submitting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.send, size: 18),
-            label: Text(provider.submitting ? 'AI 评估中…' : '提交'),
           ),
         ),
       ],

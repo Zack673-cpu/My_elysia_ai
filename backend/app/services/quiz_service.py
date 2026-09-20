@@ -290,7 +290,8 @@ class QuizService:
             return self._build_state(record)
 
         # 优先到期复习卡，同时把范围里还没覆盖的领域各补一道新题，
-        # 保证一轮下来范围里每个领域都有一道
+        # 保证一轮下来范围里每个领域都有一道。展示的始终是到期复习题，
+        # 补齐的新题留在今日记录里，用"再来一题"依次作答。
         card = self._pick_due_card()
         if card is not None:
             record = self._new_record(card, is_review=True)
@@ -298,8 +299,6 @@ class QuizService:
             for t in topics:
                 new_card = await self._generate_new_card(topic=t)
                 self._new_record(new_card, is_review=False)
-            if topics:
-                record = self._get_today_record()
             return self._build_state(record)
 
         if force_new:

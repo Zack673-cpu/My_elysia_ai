@@ -26,6 +26,13 @@ class ChatProvider extends ChangeNotifier {
 
   /// 创建新对话
   Future<void> createNewConversation() async {
+    // 已经在空白的新对话里了，就不再新建（避免反复点"新建对话"产生一堆空会话）
+    if (_currentConversation != null &&
+        _messages.isEmpty &&
+        !_isStreaming &&
+        !_isLoading) {
+      return;
+    }
     try {
       _error = null;
       _currentConversation = await _chatService.createConversation();

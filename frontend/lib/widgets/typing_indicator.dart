@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../config/app_config.dart';
+import '../config/theme.dart';
 
 class TypingIndicator extends StatelessWidget {
   final String content;
@@ -10,26 +11,43 @@ class TypingIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final bubbleColor = theme.brightness == Brightness.dark
+        ? theme.colorScheme.surfaceContainer
+        : const Color(0xFFFFFDFE);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          const CircleAvatar(
-            radius: 16,
-            backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
+          Container(
+            width: 36,
+            height: 36,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: AppTheme.brandGradient,
+            ),
+            child: const ClipOval(
+              child: CircleAvatar(
+                backgroundImage: AssetImage(AppConfig.aiAvatarAsset),
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
+                color: bubbleColor,
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
+                  topLeft: Radius.circular(6),
+                  topRight: Radius.circular(20),
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                ),
+                border: Border.all(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.22),
                 ),
               ),
               child: content.isEmpty
@@ -99,7 +117,7 @@ class _DotState extends State<_Dot> with SingleTickerProviderStateMixin {
           width: 8,
           height: 8,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: _animation.value),
+            color: AppTheme.primaryColor.withValues(alpha: _animation.value),
             shape: BoxShape.circle,
           ),
         );
