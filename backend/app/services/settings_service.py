@@ -1,6 +1,10 @@
+import logging
+
 from sqlmodel import Session
 from app.db import engine
 from app.models.db_models import AppSetting
+
+logger = logging.getLogger(__name__)
 
 # 默认设置：每日问答领域默认前后端全栈，新闻范围默认 AI
 DEFAULTS = {
@@ -28,6 +32,7 @@ class SettingsService:
                 row = AppSetting(key=key, value=value)
                 session.add(row)
             session.commit()
+        logger.info("设置变更 %s = %r", key, value)
 
     def get_quiz_topic(self) -> str:
         return self.get("quiz_topic") or DEFAULTS["quiz_topic"]

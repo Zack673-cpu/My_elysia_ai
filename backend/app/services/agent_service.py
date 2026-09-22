@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import AsyncGenerator, Optional
 
@@ -21,6 +22,8 @@ from app.services.news_service import (
     _extract_text,
 )
 from app.services.search_service import SearchService
+
+logger = logging.getLogger(__name__)
 
 
 MAX_CONTEXT_MESSAGES = 30  # 滑动窗口大小
@@ -196,6 +199,9 @@ class AgentService:
 
         final_message = out_messages[-1]
         content = final_message.content if isinstance(final_message.content, str) else str(final_message.content)
+        logger.info(
+            "chat 完成 len=%s search=%s tokens=%s", len(content), search_performed, tokens,
+        )
         return content, search_performed, tokens
 
     async def chat_stream(

@@ -1,5 +1,9 @@
+import logging
+
 from app.services.conversation_service import ConversationService
 from app.services.llm_service import LLMService
+
+logger = logging.getLogger(__name__)
 
 KEEP_RECENT = 12  # 压缩后保留最近的消息条数
 
@@ -26,6 +30,7 @@ class CompressService:
 
         messages = [m for m in conv.messages if m.role.value != "system_context"]
         if len(messages) <= KEEP_RECENT:
+            logger.info("compress 跳过：消息数 %s <= %s", len(messages), KEEP_RECENT)
             return {
                 "compressed": False,
                 "message": f"消息不超过 {KEEP_RECENT} 条，暂不需要压缩",
@@ -45,6 +50,7 @@ class CompressService:
 
         summary = await self.llm.ask(_COMPRESS_SYSTEM, user_prompt)
         self._conv_service.set_summary(conversation_id, summary.strip())
+        logger.info("compress 完成：压缩 %s 条旧消息为摘要", len(old_messages))
         return {
             "compressed": True,
             "message": f"已压缩 {len(old_messages)} 条旧消息为摘要",

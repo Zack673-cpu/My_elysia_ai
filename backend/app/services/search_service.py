@@ -1,9 +1,12 @@
 import hashlib
 import json
+import logging
 import time
 from typing import Optional
 from ddgs import DDGS
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class SearchService:
@@ -63,7 +66,7 @@ class SearchService:
         # 兜底：所有引擎和重试都失败时，过期资料也比没资料强
         stale = self._read_cache(query, ignore_ttl=True)
         if stale:
-            print(f"[SearchService] 搜索失败，使用过期缓存兜底: {query}")
+            logger.warning("搜索失败，使用过期缓存兜底: %s", query)
             return stale[:max_results]
         return []
 
@@ -78,8 +81,12 @@ class SearchService:
                     return results
             except Exception as e:
                 reason = self._describe_error(e)
-                print(
-                    f"[SearchService] 第 {attempt}/{self.MAX_ATTEMPTS} 次搜索失败（{reason}）: {e}"
+                logger.warning(
+                    "第 %s/%s 次搜索失败（%s）: %s",
+                    attempt,
+                    self.MAX_ATTEMPTS,
+                    reason,
+                    e,
                 )
                 # 引擎正常响应但确实没有资料，重试只是白白等待
                 if reason == "无匹配结果":

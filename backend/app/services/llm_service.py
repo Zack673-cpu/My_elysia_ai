@@ -1,7 +1,10 @@
 import json
+import logging
 import re
 from langchain_openai import ChatOpenAI
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class LLMService:
@@ -33,8 +36,10 @@ class LLMService:
         text = await self.ask(system, user, temperature=temperature)
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match:
+            logger.warning("ask_json 未找到 JSON 片段，调用方将走降级分支")
             return {}
         try:
             return json.loads(match.group(0))
         except json.JSONDecodeError:
+            logger.warning("ask_json 解析失败，调用方将走降级分支")
             return {}

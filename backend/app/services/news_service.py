@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import re
 import time
 import urllib.request
@@ -14,6 +15,8 @@ from app.models.db_models import NewsItem
 from app.services.llm_service import LLMService
 from app.services.search_service import SearchService
 from app.services.settings_service import settings_service
+
+logger = logging.getLogger(__name__)
 
 _SUMMARIZE_SYSTEM = """你是一个新闻编辑。用户的专业领域是「{topic}」。
 下面给出的都是今天发布的新闻，每条附有网页原文摘录，请按重要性挑选最重要的精华新闻（最多 5 条，宁缺毋滥）：
@@ -88,7 +91,7 @@ def _fetch_html(url: str, timeout: float = 8.0) -> Optional[str]:
         with opener.open(req, timeout=timeout) as resp:
             return resp.read(512 * 1024).decode("utf-8", errors="ignore")
     except Exception as e:
-        print(f"[NewsService] 获取网页失败 {url}: {e}")
+        logger.warning("获取网页失败 %s: %s", url, e)
         return None
 
 
@@ -168,7 +171,7 @@ def fetch_aihot_candidates(limit: int = 12) -> list[dict]:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
-        print(f"[NewsService] AIHOT 获取失败: {e}")
+        logger.warning("AIHOT 获取失败: %s", e)
         return []
     candidates: list[dict] = []
     for item in data.get("items", []):
@@ -211,7 +214,7 @@ class NewsService:
         force=True 供用户在设置里改范围后手动「立即刷新」，绕过 1 小时防抖。
         """
         if not force and time.time() - self._last_fetch_ts() < self.MIN_REFRESH_GAP:
-            print("[NewsService] 最近 1 小时内已抓取过，跳过")
+            logger.info("最近 1 小时内已抓取过，跳过")
             return 0
 
         scope = settings_service.get_news_scope()
@@ -233,7 +236,7 @@ class NewsService:
                         candidates.append(r)
 
         if not candidates:
-            print("[NewsService] 新闻源无结果，本次跳过")
+            logger.info("新闻源无结果，本次跳过")
             return 0
 
         candidates = candidates[:16]
@@ -245,7 +248,7 @@ class NewsService:
                 if pub is not None and self.is_today(pub):
                     fresh.append((r, pub, r.get("body", "")))
                 else:
-                    print(f"[NewsService] 淘汰 AIHOT 候选: {r.get('href', '')}（发布时间: {pub}）")
+                    logger.info("淘汰 AIHOT 候选: %s（发布时间: %s）", r.get("href", ""), pub)
         else:
             # 时效性先行：并发检查候选网页（排除列表页），只留电脑当天发布的
             inspections = await asyncio.gather(*[
@@ -256,10 +259,10 @@ class NewsService:
                 if pub is not None and self.is_today(pub):
                     fresh.append((r, pub, text))
                 else:
-                    print(f"[NewsService] 淘汰候选: {r.get('href', '')}（发布时间: {pub}）")
+                    logger.info("淘汰候选: %s（发布时间: %s）", r.get("href", ""), pub)
 
         if not fresh:
-            print("[NewsService] 候选中没有当天发布的单篇新闻，本次跳过")
+            logger.info("候选中没有当天发布的单篇新闻，本次跳过")
             return self._cleanup_legacy()
 
         # AI 基于网页原文摘录按重要性挑选并翻译成中文概括
@@ -332,11 +335,14 @@ class NewsService:
 
             session.commit()
 
-        print(
-            f"[NewsService] 抓取完成（来源: {'AIHOT' if from_aihot else '搜索引擎'}），"
-            f"新增 {added} 条，"
-            f"清理 {len(old_items)} 条过期、{len(dirty_items)} 条脏数据、"
-            f"{len(dup_items)} 条重复"
+        logger.info(
+            "抓取完成（来源: %s），新增 %s 条，"
+            "清理 %s 条过期、%s 条脏数据、%s 条重复",
+            "AIHOT" if from_aihot else "搜索引擎",
+            added,
+            len(old_items),
+            len(dirty_items),
+            len(dup_items),
         )
         return added
 
@@ -368,7 +374,7 @@ class NewsService:
                 session.delete(item)
             session.commit()
         if dirty_items or dup_items:
-            print(f"[NewsService] 清理 {len(dirty_items)} 条脏数据、{len(dup_items)} 条重复")
+            logger.info("清理 %s 条脏数据、%s 条重复", len(dirty_items), len(dup_items))
         return 0
 
     @staticmethod

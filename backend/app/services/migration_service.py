@@ -1,9 +1,12 @@
 import json
+import logging
 from datetime import datetime, UTC
 from sqlmodel import Session
 from app.config import settings
 from app.db import engine
 from app.models.db_models import AppSetting, ConversationRecord, MessageRecord
+
+logger = logging.getLogger(__name__)
 
 _MIGRATION_FLAG = "migrated_json_conversations"
 
@@ -34,7 +37,7 @@ def migrate_json_conversations() -> int:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            print(f"[Migration] 跳过损坏的对话文件: {path.name}")
+            logger.warning("跳过损坏的对话文件: %s", path.name)
             continue
 
         with Session(engine) as session:
@@ -68,5 +71,5 @@ def migrate_json_conversations() -> int:
         session.commit()
 
     if imported:
-        print(f"[Migration] 已从 JSON 导入 {imported} 个对话到数据库")
+        logger.info("已从 JSON 导入 %s 个对话到数据库", imported)
     return imported

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, UTC
 from typing import Optional
 from sqlmodel import Session, select
@@ -11,6 +12,8 @@ from app.models.schemas import (
     MessageMetadata,
     MessageRole,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ConversationService:
@@ -62,6 +65,7 @@ class ConversationService:
             session.add(rec)
             session.commit()
             session.refresh(rec)
+        logger.info("创建对话 %s（标题=%r）", rec.conversation_id, rec.title)
         return self._conv_to_schema(rec, [])
 
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
@@ -117,6 +121,7 @@ class ConversationService:
                 session.delete(m)
             session.delete(rec)
             session.commit()
+            logger.info("删除对话 %s（%s 条消息）", conversation_id, len(messages))
             return True
 
     def add_message(

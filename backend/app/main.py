@@ -14,14 +14,14 @@ from app.api import (
 )
 from app.config import APP_FULL_NAME
 from app.db import create_db_and_tables
+from app.logging_config import setup_logging
 from app.services.migration_service import migrate_json_conversations
 from app.services.news_service import news_service
 
-# 开机自启等不经过 run.py 的启动方式也能拿到带时间戳的结构化日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+# 统一日志：控制台 + data/app.log，所有模块共用（见 app/logging_config.py）
+setup_logging()
+
+logger = logging.getLogger("app.main")
 
 
 @asynccontextmanager
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
         try:
             await news_service.refresh_news()
         except Exception as e:
-            print(f"[NewsService] 抓取失败（不影响服务）: {e}")
+            logger.exception("[NewsService] 抓取失败（不影响服务）: %s", e)
 
     task = asyncio.create_task(_fetch_news_background())
 
