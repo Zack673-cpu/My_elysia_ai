@@ -21,6 +21,7 @@ class ApiConfig {
   static String get dailyToday => '$_baseUrl/api/daily/today';
   static String get dailyNew => '$_baseUrl/api/daily/new';
   static String get dailyAnswer => '$_baseUrl/api/daily/answer';
+  static String get dailyReevaluate => '$_baseUrl/api/daily/reevaluate';
   static String get dailyResolve => '$_baseUrl/api/daily/resolve';
   static String get news => '$_baseUrl/api/news';
   static String get newsRefresh => '$_baseUrl/api/news/refresh';

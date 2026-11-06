@@ -35,6 +35,15 @@ async def submit_answer(req: DailyAnswerRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/reevaluate", response_model=DailyState)
+async def reevaluate():
+    """评估失败后重试：用已保存的用户回答重新发起 AI 评估"""
+    try:
+        return await quiz_service.reevaluate()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/resolve", response_model=DailyState)
 async def resolve(req: DailyResolveRequest):
     """提交用户对决策弹窗按钮的选择"""

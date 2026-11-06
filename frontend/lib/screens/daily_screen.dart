@@ -96,7 +96,7 @@ class _DailyScreenState extends State<DailyScreen> {
                   if (!state.answered)
                     _buildAnswerInput(context, provider)
                   else ...[
-                    _buildAnsweredSection(context, state),
+                    _buildAnsweredSection(context, provider, state),
                     if (state.decision != null) ...[
                       const SizedBox(height: 20),
                       _buildDecisionCard(context, provider, state),
@@ -235,8 +235,14 @@ class _DailyScreenState extends State<DailyScreen> {
     );
   }
 
-  Widget _buildAnsweredSection(BuildContext context, DailyState state) {
+  Widget _buildAnsweredSection(
+    BuildContext context,
+    DailyProvider provider,
+    DailyState state,
+  ) {
     final theme = Theme.of(context);
+    // 评估失败：grade 为空（新版标记）或 feedback 是旧版失败占位文本（存量记录）
+    final evalFailed = state.grade == null || state.feedback == '评估失败，请重试。';
     final gradeColor = switch (state.grade) {
       'correct' => Colors.green,
       'wrong' => theme.colorScheme.error,
@@ -275,14 +281,35 @@ class _DailyScreenState extends State<DailyScreen> {
             const SizedBox(width: 8),
             Text('爱莉的回应♪ ', style: theme.textTheme.titleSmall),
             const SizedBox(width: 10),
-            _chip(context, gradeText, gradeColor.withValues(alpha: 0.15)),
+            _chip(
+              context,
+              evalFailed ? '评估失败' : gradeText,
+              (evalFailed ? theme.colorScheme.error : gradeColor)
+                  .withValues(alpha: 0.15),
+            ),
           ],
         ),
         const SizedBox(height: 10),
-        Text(
-          state.feedback ?? '',
-          style: theme.textTheme.bodyMedium?.copyWith(height: 1.7),
-        ),
+        if (evalFailed) ...[
+          Text(
+            '这次评估没能完成呢，可能是网络或模型开小差了，重试一下就好♪',
+            style: theme.textTheme.bodyMedium?.copyWith(height: 1.7),
+          ),
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerRight,
+            child: GradientButton(
+              label: provider.submitting ? '重新评估中…' : '重试评估',
+              icon: Icons.refresh_rounded,
+              loading: provider.submitting,
+              onPressed: provider.submitting ? null : () => provider.reevaluate(),
+            ),
+          ),
+        ] else
+          Text(
+            state.feedback ?? '',
+            style: theme.textTheme.bodyMedium?.copyWith(height: 1.7),
+          ),
         // 答完就展示参考答案（无论对错，不依赖 AI 反馈是否写全）
         if ((state.referenceAnswer ?? '').isNotEmpty) ...[
           const SizedBox(height: 14),

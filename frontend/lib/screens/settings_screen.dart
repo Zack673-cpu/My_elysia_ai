@@ -200,7 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context)
                             .showSnackBar(SnackBar(content: Text(msg)));
-                        if (ok) context.read<DailyProvider>().loadToday();
+                        if (ok) context.read<DailyProvider>().loadToday(forceNew: true);
                       },
               ),
             ),

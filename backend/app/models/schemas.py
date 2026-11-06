@@ -106,6 +106,8 @@ class DailyState(BaseModel):
     # 需要用户弹窗决策的类型：new_question / review_partial / mastery_exam / None
     decision: Optional[str] = None
     due_count: int = 0
+    # 今天还没作答的新题数量（"再来一题"按钮提示用）
+    pending_new_count: int = 0
 
 
 class NewsItemOut(BaseModel):

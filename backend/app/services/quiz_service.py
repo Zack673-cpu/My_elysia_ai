@@ -45,6 +45,9 @@ _EVAL_SYSTEM = """你是一个严谨的答题评估官。根据题目和参考�
    "partial"：回答不够完整或不够精确，无法简单用对错判断
 只输出 JSON：{"grade": "...", "feedback": "...", "suggestion": "..."}"""
 
+# 旧版评估失败时落库的占位文本（识别存量卡住的记录用）
+_EVAL_FAIL_TEXT = "评估失败，请重试。"
+
 
 class QuizService:
     """每日问答：艾宾浩斯间隔重复。
@@ -113,10 +116,11 @@ class QuizService:
     def _get_today_record(self) -> QuizRecord | None:
         """今日"当前应展示"的记录，按优先级：
         1. 已作答但未处理完（弹窗待决）的记录 —— 弹窗必须最先响应，否则决策会丢
-        2. 最早一条未作答的复习题 —— 复习卡先插入、先展示，实现复习优先
-        3. 未答的新题：仅当今天还没答过题时展示（当天首道可能就是新题）；
+        2. on_demand 的未答新题 —— 用户设置页主动要求"立即出题"，优先展示
+        3. 最早一条未作答的复习题 —— 复习卡先插入、先展示，实现复习优先
+        4. 未答的新题：仅当今天还没答过题时展示（当天首道可能就是新题）；
            今天已答过则跳过未答新题（那是"再来一题"的侧题，不自动弹）
-        4. 兜底取最新一条（展示已答反馈/完成态）
+        5. 兜底取最新一条（展示已答反馈/完成态）
         """
         def _first(stmt):
             with Session(engine) as session:
@@ -130,6 +134,19 @@ class QuizService:
                 QuizRecord.resolved.is_(False),
             )
             .order_by(QuizRecord.id.desc())
+        )
+        if record is not None:
+            return record
+
+        # on_demand 的未答新题（用户主动要求"立即出题"，不受"今日已答过"限制）
+        record = _first(
+            select(QuizRecord)
+            .where(
+                QuizRecord.asked_date == self._today(),
+                QuizRecord.user_answer.is_(None),
+                QuizRecord.on_demand.is_(True),
+            )
+            .order_by(QuizRecord.id)
         )
         if record is not None:
             return record
@@ -309,12 +326,13 @@ class QuizService:
             ).all()
             return len(rows)
 
-    def _new_record(self, card: QuizCard, is_review: bool) -> QuizRecord:
+    def _new_record(self, card: QuizCard, is_review: bool, on_demand: bool = False) -> QuizRecord:
         """为卡片建一条今日作答记录"""
         record = QuizRecord(
             card_id=card.id,
             is_review=is_review,
             asked_date=self._today(),
+            on_demand=on_demand,
         )
         with Session(engine) as session:
             session.add(record)
@@ -447,11 +465,12 @@ class QuizService:
                 self._discard_unanswered()
         elif record and not record.resolved:
             raise ValueError("今天已作答的题还没点决策弹窗，先去每日页处理完再出新题")
-        # 按范围出题：每个领域各出一道；今天已覆盖过的领域跳过，全覆盖则整轮再出
+        # 按范围出题：每个领域各出一道；今天已覆盖过的领域跳过，全覆盖则整轮再出。
+        # 打 on_demand 标记：今天已答过题时也要优先展示这些题（区别于"再来一题"侧题）
         topics = self._uncovered_topics() or self._split_topics(settings_service.get_quiz_topic())
         for t in topics:
             card = await self._generate_new_card(topic=t)
-            self._new_record(card, is_review=False)
+            self._new_record(card, is_review=False, on_demand=True)
         record = self._get_today_record()
         return self._build_state(record)
 
@@ -507,15 +526,28 @@ class QuizService:
             if card is None:
                 raise ValueError("题目卡片不存在")
 
-            data = await self.llm.ask_json(
-                _EVAL_SYSTEM,
-                f"题目：{card.question}\n参考答案：{card.reference_answer}\n用户回答：{answer_text}",
-                temperature=0.3,
-            )
-            grade = data.get("grade")
-            if grade not in ("correct", "wrong", "partial"):
-                grade = "partial"
-            feedback = (data.get("feedback") or "").strip() or "评估失败，请重试。"
+            try:
+                data = await self.llm.ask_json(
+                    _EVAL_SYSTEM,
+                    f"题目：{card.question}\n参考答案：{card.reference_answer}\n用户回答：{answer_text}",
+                    temperature=0.3,
+                )
+            except Exception:
+                logger.warning("评估请求异常，转入待重试状态", exc_info=True)
+                data = {}
+            grade = (data.get("grade") or "").strip()
+            feedback = (data.get("feedback") or "").strip()
+            if grade not in ("correct", "wrong", "partial") or not feedback:
+                # 评估失败：答案落库但 grade 置空（待重试标记），
+                # 不动卡片统计和复习排期，前端展示"重试"按钮走 /reevaluate
+                record.user_answer = answer_text
+                record.grade = None
+                record.feedback = None
+                record.suggestion = None
+                session.add(record)
+                session.commit()
+                session.refresh(record)
+                return self._build_state(record)
             suggestion = (data.get("suggestion") or "").strip()
 
             record.user_answer = answer_text
@@ -524,28 +556,87 @@ class QuizService:
             record.suggestion = suggestion
 
             if record.is_review:
-                card.review_count += 1
-                if grade == "correct":
-                    card.correct_count += 1
-                    if card.level >= MAX_LEVEL:
-                        # 毕业考：最高级再答对，不自动毕业，等用户在弹窗里决定
-                        pass
-                    else:
-                        card.level += 1
-                        card.next_review_date = self._add_days(self._interval(card.level))
-                        # 自动升级、没有决策弹窗，答完即算处理完成；
-                        # 否则 resolved 恒为 False 会挡住当天“再来一题”继续清积压
-                        record.resolved = True
-                elif grade == "wrong":
-                    # 答错只降一级，次日重问
-                    card.level = max(1, card.level - 1)
-                    card.next_review_date = self._add_days(1)
-                    # 自动降级、没有决策弹窗，答完即算处理完成
-                    record.resolved = True
-                # partial：不自动升降级，等用户弹窗决策（resolved 保持 False）
-            else:
-                # 新题：等用户弹窗决定是否投入复习，暂不排期
+                self._apply_review_outcome(record, card, grade)
+            # 新题：等用户弹窗决定是否投入复习，暂不排期
+
+            session.add(card)
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+        return self._build_state(record)
+
+    @staticmethod
+    def _apply_review_outcome(
+        record: QuizRecord, card: QuizCard, grade: str, *, count_review: bool = True
+    ) -> None:
+        """复习题按评估结果自动调整排期（新题不走这里，等用户弹窗决策）。
+
+        count_review=False 用于重试评估：旧版失败的记录当时已按 partial
+        计过一次复习次数，重试成功后只补评级结果、不重复计数。
+        """
+        if count_review:
+            card.review_count += 1
+        if grade == "correct":
+            card.correct_count += 1
+            if card.level >= MAX_LEVEL:
+                # 毕业考：最高级再答对，不自动毕业，等用户在弹窗里决定
                 pass
+            else:
+                card.level += 1
+                card.next_review_date = QuizService._add_days(
+                    QuizService._interval(card.level)
+                )
+                # 自动升级、没有决策弹窗，答完即算处理完成；
+                # 否则 resolved 恒为 False 会挡住当天“再来一题”继续清积压
+                record.resolved = True
+        elif grade == "wrong":
+            # 答错只降一级，次日重问
+            card.level = max(1, card.level - 1)
+            card.next_review_date = QuizService._add_days(1)
+            # 自动降级、没有决策弹窗，答完即算处理完成
+            record.resolved = True
+        # partial：不自动升降级，等用户弹窗决策（resolved 保持 False）
+
+    async def reevaluate(self) -> dict:
+        """评估失败后重试：用已保存的用户回答重新发起 AI 评估。
+
+        待重试的记录有两种形态：
+        - grade 为空：新版评估失败的标记（答案已存，副作用未施加）
+        - grade 非空但 feedback 是旧版失败占位文本：存量卡住的记录
+          （当时已按 partial 施加过副作用，重试成功后不重复计复习次数）
+        """
+        record = self._get_today_record()
+        if record is None or record.user_answer is None:
+            raise ValueError("今日题目尚未作答")
+        legacy = record.grade is not None
+        if legacy and (record.feedback or "") != _EVAL_FAIL_TEXT:
+            raise ValueError("评估已完成，无需重试")
+
+        with Session(engine) as session:
+            card = session.get(QuizCard, record.card_id)
+            if card is None:
+                raise ValueError("题目卡片不存在")
+
+            try:
+                data = await self.llm.ask_json(
+                    _EVAL_SYSTEM,
+                    f"题目：{card.question}\n参考答案：{card.reference_answer}\n用户回答：{record.user_answer}",
+                    temperature=0.3,
+                )
+            except Exception:
+                logger.warning("重试评估请求异常", exc_info=True)
+                data = {}
+            grade = (data.get("grade") or "").strip()
+            feedback = (data.get("feedback") or "").strip()
+            if grade not in ("correct", "wrong", "partial") or not feedback:
+                # 仍然失败：保持原状态，前端继续展示重试按钮
+                return self._build_state(record)
+
+            record.grade = grade
+            record.feedback = feedback
+            record.suggestion = (data.get("suggestion") or "").strip()
+            if record.is_review:
+                self._apply_review_outcome(record, card, grade, count_review=not legacy)
 
             session.add(card)
             session.add(record)

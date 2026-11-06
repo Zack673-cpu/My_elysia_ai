@@ -78,6 +78,9 @@ class QuizRecord(SQLModel, table=True):
     # 本题是否已处理完毕：无需弹窗的复习题（答对自动升级/答错自动降级）答完即 True；
     # 需弹窗决策的（新题投入复习、模糊题升降级、毕业考）在用户点选后才 True
     resolved: bool = False
+    # 是否来自设置页"按此领域立即出题"：on_demand 的未答新题不受
+    # "今天已答过则不自动弹侧题"限制，会优先展示直到被作答
+    on_demand: bool = False
 
 
 class NewsItem(SQLModel, table=True):

@@ -205,6 +205,18 @@ class ApiService {
     throw Exception('提交答案失败: ${response.statusCode}');
   }
 
+  /// 评估失败后重试：用已保存的答案重新发起 AI 评估
+  Future<DailyState> reevaluateDaily() async {
+    final response = await _client.post(
+      Uri.parse(ApiConfig.dailyReevaluate),
+      headers: {'Content-Type': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return DailyState.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('重试评估失败: ${response.statusCode}');
+  }
+
   /// 提交决策弹窗的按钮选择
   Future<DailyState> resolveDaily(String decision) async {
     final response = await _client.post(

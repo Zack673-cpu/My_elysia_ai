@@ -45,6 +45,21 @@ class DailyProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 评估失败后重试：重新发送评估请求（用已保存的答案）
+  Future<void> reevaluate() async {
+    if (_submitting) return;
+    _submitting = true;
+    _error = null;
+    notifyListeners();
+    try {
+      _state = await _api.reevaluateDaily();
+    } catch (e) {
+      _error = '重试评估失败: $e';
+    }
+    _submitting = false;
+    notifyListeners();
+  }
+
   /// 提交决策弹窗的按钮选择
   Future<void> resolve(String decision) async {
     _submitting = true;
